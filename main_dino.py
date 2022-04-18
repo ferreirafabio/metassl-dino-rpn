@@ -18,6 +18,7 @@ import datetime
 import time
 import math
 import json
+import neps
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,7 @@ from torchvision import models as torchvision_models
 import utils
 import vision_transformer as vits
 from vision_transformer import DINOHead
+from functools import partial
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -116,6 +118,9 @@ def get_args_parser():
         help="""Scale range of the cropped image before resizing, relatively to the origin image.
         Used for small local view cropping of multi-crop.""")
 
+    # NEPS
+    parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment."),
+
     # Misc
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
@@ -129,12 +134,22 @@ def get_args_parser():
     return parser
 
 
-def train_dino(args):
+def train_dino(working_directory, args, **hyperparameters):
     utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
+
+    # DINO run with NEPS
+    if args.is_neps_run:
+        print("NEPS hyperparameters: ", hyperparameters)
+        
+        # Set hyperparameters
+        args.lr = hyperparameters["lr"]
+        # TODO: Set the other hyperparameters
+
+        raise Exception("NEPS test is done!")
 
     # ============ preparing data ... ============
     transform = DataAugmentationDINO(
@@ -468,4 +483,43 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    train_dino(args)
+    
+    # DINO run with NEPS
+    if args.is_neps_run:
+        pipeline_space = dict(
+                    lr=neps.FloatParameter(
+                        lower=0.00001, upper=0.01, log=True, default=0.0005, default_confidence="medium"
+                    ),
+                    
+                    # TODO: Define configspace for the other hyperparameters
+                    # out_dim
+                    # momentum_teacher
+                    # warmup_teacher_temp
+                    # warmup_teacher_temp_epochs
+                    # weight_decay
+                    # weight_decay_end
+                    # freeze_last_layer
+                    # lr
+                    # warmup_epochs
+                    # min_lr
+                    # drop_path_rate
+                    # (use_bn_in_head)
+                    # (norm_last_layer)
+                )
+        train_dino = partial(train_dino, args=args)
+
+        # TODO: Finetuning should be executed directly after pretraining by one single command
+        # TODO: We need a validation set
+        # TODO: The validation performance should be returned at the end of the finetuning part
+
+        neps.run(
+            run_pipeline=train_dino,
+            pipeline_space=pipeline_space,
+            working_directory=args.output_dir,
+            max_evaluations_total=50,
+            max_evaluations_per_run=1,
+        )
+
+    # Default DINO run
+    else:
+        train_dino(args)
