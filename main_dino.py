@@ -141,16 +141,24 @@ def train_dino(working_directory, args, **hyperparameters):
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
-    # DINO run with NEPS
+    # ============ DINO run with NEPS ============
     if args.is_neps_run:
         print("NEPS hyperparameters: ", hyperparameters)
         
-        # Set hyperparameters
+        # Parameterize hyperparameters
         args.lr = hyperparameters["lr"]
-        # TODO: Set the other hyperparameters
-
-        raise Exception("NEPS test is done!")
-
+        # TODO: args.out_dim = hyperparameters["out_dim"]
+        args.momentum_teacher = hyperparameters["momentum_teacher"]
+        args.warmup_teacher_temp = hyperparameters["warmup_teacher_temp"]
+        args.warmup_teacher_temp_epochs = hyperparameters["warmup_teacher_temp_epochs"]
+        args.weight_decay = hyperparameters["weight_decay"]
+        args.weight_decay_end = hyperparameters["weight_decay_end"]
+        args.freeze_last_layer = hyperparameters["freeze_last_layer"]
+        args.warmup_epochs = hyperparameters["warmup_epochs"]
+        args.min_lr = hyperparameters["min_lr"]
+        args.drop_path_rate = hyperparameters["drop_path_rate"]
+        args.optimizer = hyperparameters["optimizer"]
+    
     # ============ preparing data ... ============
     transform = DataAugmentationDINO(
         args.global_crops_scale,
@@ -488,23 +496,39 @@ if __name__ == '__main__':
     if args.is_neps_run:
         pipeline_space = dict(
                     lr=neps.FloatParameter(
-                        lower=0.00001, upper=0.01, log=True, default=0.0005, default_confidence="medium"
+                        lower=0.00001, upper=0.01, log=True, default=0.0005, default_confidence="high"
                     ),
-                    
-                    # TODO: Define configspace for the other hyperparameters
-                    # out_dim
-                    # momentum_teacher
-                    # warmup_teacher_temp
-                    # warmup_teacher_temp_epochs
-                    # weight_decay
-                    # weight_decay_end
-                    # freeze_last_layer
-                    # lr
-                    # warmup_epochs
-                    # min_lr
-                    # drop_path_rate
-                    # (use_bn_in_head)
-                    # (norm_last_layer)
+                    # TODO: out_dim=neps.IntegerParameter(
+                    #     lower=60000, upper=70000, log=False, default=65536, default_confidence="high"
+                    # ),
+                    momentum_teacher=neps.FloatParameter(
+                        lower=0.8, upper=1, log=True, default=0.996, default_confidence="high"
+                    ),
+                    warmup_teacher_temp=neps.FloatParameter(
+                        lower=0.001, upper=0.1, log=True, default=0.04, default_confidence="high"
+                    ),
+                    warmup_teacher_temp_epochs=neps.IntegerParameter(
+                        lower=0, upper=50, log=False, default=0, default_confidence="high"
+                    ),
+                    weight_decay=neps.FloatParameter(
+                        lower=0.001, upper=0.1, log=True, default=0.04, default_confidence="high"
+                    ),
+                    weight_decay_end=neps.FloatParameter(
+                        lower=0.001, upper=0.1, log=True, default=0.4, default_confidence="high"
+                    ),
+                    freeze_last_layer=neps.IntegerParameter(
+                        lower=0, upper=10, log=False, default=1, default_confidence="high"
+                    ),
+                    warmup_epochs=neps.IntegerParameter(
+                        lower=0, upper=50, log=False, default=10, default_confidence="high"
+                    ),
+                    min_lr=neps.FloatParameter(
+                        lower=1e-7, upper=1e-5, log=True, default=1e-6, default_confidence="high"
+                    ),
+                    drop_path_rate=neps.FloatParameter(
+                        lower=0.01, upper=0.5, log=False, default=0.1, default_confidence="high"
+                    ),
+                    optimizer=neps.CategoricalParameter(choices=['adamw', 'sgd', 'lars'], default='adamw', default_confidence="high"),
                 )
         train_dino = partial(train_dino, args=args)
 
