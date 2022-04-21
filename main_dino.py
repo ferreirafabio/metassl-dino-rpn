@@ -19,6 +19,7 @@ import time
 import math
 import json
 import neps
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,7 @@ import torch.nn as nn
 import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
+import torch.multiprocessing as mp
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
 from eval_linear import eval_linear
@@ -135,11 +137,32 @@ def get_args_parser():
     return parser
 
 
-def train_dino(working_directory, args, **hyperparameters):
-    if args.is_neps_run:
-        pass  # utils.init_distributed_mode(args) is called before train_dino
-    else:
-        utils.init_distributed_mode(args)
+def find_free_port():
+    import socket
+    from contextlib import closing
+
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(("", 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
+
+
+def dino_neps_main(working_directory, args, **hyperparameters):
+    ngpus_per_node = torch.cuda.device_count()
+    print(f"--------------{ngpus_per_node}-------------")
+    args.world_size = 1
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = str(find_free_port())
+    #args.rank = int()
+
+    mp.spawn(
+            train_dino,
+            nprocs=ngpus_per_node,
+            args=(working_directory, args, hyperparameters)
+            )    
+
+def train_dino(x, working_directory, args, hyperparameters=None):
+    utils.init_distributed_mode(args) 
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
@@ -547,6 +570,10 @@ if __name__ == '__main__':
     
     # DINO run with NEPS
     if args.is_neps_run:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
+        )
         pipeline_space = dict(
                     lr=neps.FloatParameter(
                         lower=0.00001, upper=0.01, log=True, default=0.0005, default_confidence="high"
@@ -583,16 +610,14 @@ if __name__ == '__main__':
                     ),
                     optimizer=neps.CategoricalParameter(choices=['adamw', 'sgd', 'lars'], default='adamw', default_confidence="high"),
                 )
-        train_dino = partial(train_dino, args=args)
+        dino_neps_main = partial(dino_neps_main, args=args)
 
         # TODO: Finetuning should be executed directly after pretraining by one single command
         # TODO: We need a validation set
         # TODO: The validation performance should be returned at the end of the finetuning part
         
-        utils.init_distributed_mode(args)
-
         neps.run(
-            run_pipeline=train_dino,
+            run_pipeline=dino_neps_main,
             pipeline_space=pipeline_space,
             working_directory=args.output_dir,
             max_evaluations_total=50,

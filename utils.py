@@ -466,12 +466,15 @@ def setup_for_distributed(is_master):
 
 def init_distributed_mode(args):
     # launched with torch.distributed.launch
-    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-        args.rank = int(os.environ["RANK"])
-        args.world_size = int(os.environ['WORLD_SIZE'])
-        args.gpu = int(os.environ['LOCAL_RANK'])
+    #if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+    #args.rank = int(os.environ["RANK"])
+    #args.world_size = int(os.environ['WORLD_SIZE'])
+    #args.gpu = int(os.environ['LOCAL_RANK'])
+    args.rank = 8
+    args.world_size = 1
+    args.gpu = 8
     # launched with submitit on a slurm cluster
-    elif 'SLURM_PROCID' in os.environ:
+    if 'SLURM_PROCID' in os.environ:
         args.rank = int(os.environ['SLURM_PROCID'])
         args.gpu = args.rank % torch.cuda.device_count()
     # launched naively with `python main_dino.py`
