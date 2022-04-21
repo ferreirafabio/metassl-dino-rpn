@@ -29,7 +29,10 @@ import vision_transformer as vits
 
 
 def eval_linear(args):
-    utils.init_distributed_mode(args)
+    if args.is_neps_run:
+        pass  # utils.init_distributed_mode(args) done in pretraining
+    else:
+        utils.init_distributed_mode(args)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
@@ -78,7 +81,7 @@ def eval_linear(args):
 
     if args.evaluate:
         utils.load_pretrained_linear_weights(linear_classifier, args.arch, args.patch_size)
-        test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
+        test_stats = validate_network(args, val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
 
@@ -123,13 +126,13 @@ def eval_linear(args):
     for epoch in range(start_epoch, args.epochs):
         train_loader.sampler.set_epoch(epoch)
 
-        train_stats = train(model, linear_classifier, optimizer, train_loader, epoch, args.n_last_blocks, args.avgpool_patchtokens)
+        train_stats = train(args, model, linear_classifier, optimizer, train_loader, epoch, args.n_last_blocks, args.avgpool_patchtokens)
         scheduler.step()
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      'epoch': epoch}
         if epoch % args.val_freq == 0 or epoch == args.epochs - 1:
-            test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
+            test_stats = validate_network(args, val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
             print(f"Accuracy at epoch {epoch} of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
             best_acc = max(best_acc, test_stats["acc1"])
             print(f'Max accuracy so far: {best_acc:.2f}%')
@@ -148,14 +151,22 @@ def eval_linear(args):
             torch.save(save_dict, os.path.join(args.output_dir, "checkpoint.pth.tar"))
     print("Training of the supervised linear classifier on frozen features completed.\n"
                 "Top-1 test accuracy: {acc:.1f}".format(acc=best_acc))
+    
+    if args.is_neps_run:
+        return best_acc  # TODO: return best or final performance?
 
-
-def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
+def train(args, model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     linear_classifier.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
+    counter = 0  # TODO: delete before starting NEPS
     for (inp, target) in metric_logger.log_every(loader, 20, header):
+        # TODO: delete before starting NEPS
+        if counter > 1:
+            break
+        counter += 1
+
         # move to gpu
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
@@ -193,11 +204,17 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
 
 
 @torch.no_grad()
-def validate_network(val_loader, model, linear_classifier, n, avgpool):
+def validate_network(args, val_loader, model, linear_classifier, n, avgpool):
     linear_classifier.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
+    counter = 0  # TODO: delete before starting NEPS
     for inp, target in metric_logger.log_every(val_loader, 20, header):
+        # TODO: delete before starting NEPS
+        if counter > 1:
+            break
+        counter += 1
+        
         # move to gpu
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
@@ -277,5 +294,6 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
     parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
+    parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
     args = parser.parse_args()
     eval_linear(args)
