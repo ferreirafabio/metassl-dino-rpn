@@ -471,7 +471,7 @@ def init_distributed_mode(args, rank):
     #args.world_size = int(os.environ['WORLD_SIZE'])
     #args.gpu = int(os.environ['LOCAL_RANK'])
     # args.rank = int(os.environ["RANK"])
-    args.world_size = 1
+    args.world_size = 8
     args.gpu = 8
     # launched with submitit on a slurm cluster
     if 'SLURM_PROCID' in os.environ:
