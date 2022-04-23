@@ -464,18 +464,19 @@ def setup_for_distributed(is_master):
     __builtin__.print = print
 
 
-def init_distributed_mode(args):
+def init_distributed_mode(args, rank):
     # launched with torch.distributed.launch
     #if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
     #args.rank = int(os.environ["RANK"])
     #args.world_size = int(os.environ['WORLD_SIZE'])
     #args.gpu = int(os.environ['LOCAL_RANK'])
-    args.rank = 8
+    # args.rank = int(os.environ["RANK"])
     args.world_size = 1
     args.gpu = 8
     # launched with submitit on a slurm cluster
     if 'SLURM_PROCID' in os.environ:
-        args.rank = int(os.environ['SLURM_PROCID'])
+        # args.rank = int(os.environ['SLURM_PROCID'])
+        args.rank = rank
         args.gpu = args.rank % torch.cuda.device_count()
     # launched naively with `python main_dino.py`
     # we manually add MASTER_ADDR and MASTER_PORT to env variables

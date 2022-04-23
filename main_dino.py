@@ -168,8 +168,8 @@ def dino_neps_main(working_directory, args, **hyperparameters):
     print(f"val_metric: {val_metric}")
     return val_metric
 
-def train_dino(x, working_directory, args, hyperparameters=None):
-    utils.init_distributed_mode(args) 
+def train_dino(rank, working_directory, args, hyperparameters=None):
+    utils.init_distributed_mode(args, rank) 
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
@@ -646,7 +646,7 @@ if __name__ == '__main__':
             pipeline_space=pipeline_space,
             working_directory=args.output_dir,
             max_evaluations_total=50,
-            max_evaluations_per_run=3,
+            max_evaluations_per_run=1,
         )
 
     # Default DINO run
