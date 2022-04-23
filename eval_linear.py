@@ -15,6 +15,7 @@ import os
 import argparse
 import json
 from pathlib import Path
+import numpy as np
 
 import torch
 from torch import nn
@@ -65,15 +66,52 @@ def eval_linear(args):
     linear_classifier = nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[args.gpu])
 
     # ============ preparing data ... ============
+
+    train_transform = pth_transforms.Compose([
+        pth_transforms.RandomResizedCrop(224),
+        pth_transforms.RandomHorizontalFlip(),
+        pth_transforms.ToTensor(),
+        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ])
+
     val_transform = pth_transforms.Compose([
         pth_transforms.Resize(256, interpolation=3),
         pth_transforms.CenterCrop(224),
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+
+    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
+    if args.is_neps_run:
+        dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=val_transform)
+        
+        dataset_percentage_usage = 100  # TODO: ?
+        valid_size = 0.1  # TODO?
+        num_train = int(len(dataset_train) / 100 * dataset_percentage_usage)
+        indices = list(range(num_train))
+        split = int(np.floor(valid_size * num_train))
+
+        if np.isclose(valid_size, 0.0):
+            train_idx, valid_idx = indices, indices
+        else:
+            train_idx, valid_idx = indices[split:], indices[:split]
+
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
+        valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_idx)
+    
+    else:
+        dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    
+    train_loader = torch.utils.data.DataLoader(
+        dataset_train,
+        sampler=train_sampler if args.is_neps_run else sampler,
+        batch_size=args.batch_size_per_gpu,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
     val_loader = torch.utils.data.DataLoader(
         dataset_val,
+        sampler=valid_sampler if args.is_neps_run else None,
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -84,23 +122,11 @@ def eval_linear(args):
         test_stats = validate_network(args, val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
-
-    train_transform = pth_transforms.Compose([
-        pth_transforms.RandomResizedCrop(224),
-        pth_transforms.RandomHorizontalFlip(),
-        pth_transforms.ToTensor(),
-        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
-    train_loader = torch.utils.data.DataLoader(
-        dataset_train,
-        sampler=sampler,
-        batch_size=args.batch_size_per_gpu,
-        num_workers=args.num_workers,
-        pin_memory=True,
-    )
-    print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
+    
+    if args.is_neps_run:
+        print(f"Data loaded with {len(train_idx)} train and {len(valid_idx)} val imgs.")
+    else:
+        print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
 
     # set optimizer
     optimizer = torch.optim.SGD(
@@ -153,7 +179,9 @@ def eval_linear(args):
                 "Top-1 test accuracy: {acc:.1f}".format(acc=best_acc))
     
     if args.is_neps_run:
-        return best_acc  # TODO: return best or final performance?
+        print("OUTPUT_DIR: ", args.output_dir)
+        with open(str(args.output_dir) + "/current_val_metric.txt", "w+") as f:
+            f.write(f"{best_acc}\n")  # TODO: return best or final performance?
 
 def train(args, model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     linear_classifier.train()

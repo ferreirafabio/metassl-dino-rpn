@@ -148,6 +148,7 @@ def find_free_port():
 
 
 def dino_neps_main(working_directory, args, **hyperparameters):
+    args.output_dir = working_directory
     ngpus_per_node = torch.cuda.device_count()
     print(f"--------------{ngpus_per_node}-------------")
     args.world_size = 1
@@ -159,7 +160,13 @@ def dino_neps_main(working_directory, args, **hyperparameters):
             train_dino,
             nprocs=ngpus_per_node,
             args=(working_directory, args, hyperparameters)
-            )    
+            )
+
+    # Return validation metric
+    with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
+        val_metric = f.read()
+    print(f"val_metric: {val_metric}")
+    return val_metric
 
 def train_dino(x, working_directory, args, hyperparameters=None):
     utils.init_distributed_mode(args) 
@@ -177,7 +184,7 @@ def train_dino(x, working_directory, args, hyperparameters=None):
         # TODO: args.out_dim = hyperparameters["out_dim"]
         args.momentum_teacher = hyperparameters["momentum_teacher"]
         args.warmup_teacher_temp = hyperparameters["warmup_teacher_temp"]
-        args.warmup_teacher_temp_epochs = hyperparameters["warmup_teacher_temp_epochs"]
+        # TODO: args.warmup_teacher_temp_epochs = hyperparameters["warmup_teacher_temp_epochs"]
         args.weight_decay = hyperparameters["weight_decay"]
         args.weight_decay_end = hyperparameters["weight_decay_end"]
         args.freeze_last_layer = hyperparameters["freeze_last_layer"]
@@ -197,16 +204,35 @@ def train_dino(x, working_directory, args, hyperparameters=None):
         args.local_crops_number,
     )
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
-    sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
+    if args.is_neps_run:
+        dataset_percentage_usage = 100  # TODO: ?
+        valid_size = 0.1  # TODO?
+        num_train = int(len(dataset) / 100 * dataset_percentage_usage)
+        indices = list(range(num_train))
+        split = int(np.floor(valid_size * num_train))
+
+        if np.isclose(valid_size, 0.0):
+            train_idx, valid_idx = indices, indices
+        else:
+            train_idx, valid_idx = indices[split:], indices[:split]
+
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
+    else:
+        sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
+    
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        sampler=sampler,
+        sampler=train_sampler if args.is_neps_run else sampler,
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
     )
-    print(f"Data loaded: there are {len(dataset)} images.")
+    
+    if args.is_neps_run:
+        print(f"Data loaded: there are {len(train_idx)} images.")
+    else:
+        print(f"Data loaded: there are {len(dataset)} images.")
 
     # ============ building student and teacher networks ... ============
     # we changed the name DeiT-S for ViT-S to avoid confusions
@@ -385,14 +411,13 @@ def train_dino(x, working_directory, args, hyperparameters=None):
         finetuning_args.data_path = "/data/datasets/ImageNet/imagenet-pytorch/"
         finetuning_args.output_dir = args.output_dir
         finetuning_args.is_neps_run = args.is_neps_run
-        finetuning_args.local_rank = args.local_rank
         finetuning_args.gpu = args.gpu
         finetuning_args.saveckp_freq = 10
-        finetuning_args.pretrained_weights = finetuning_args.output_dir + "/checkpoint.pth"
+        finetuning_args.pretrained_weights = str(finetuning_args.output_dir) + "/checkpoint.pth"
         
         finetuning_args.epochs = 1  # TODO: Remove
 
-        return eval_linear(finetuning_args)
+        eval_linear(finetuning_args)
 
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
@@ -621,7 +646,7 @@ if __name__ == '__main__':
             pipeline_space=pipeline_space,
             working_directory=args.output_dir,
             max_evaluations_total=50,
-            max_evaluations_per_run=1,
+            max_evaluations_per_run=3,
         )
 
     # Default DINO run
