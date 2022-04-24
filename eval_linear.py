@@ -85,8 +85,8 @@ def eval_linear(args):
     if args.is_neps_run:
         dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=val_transform)
         
-        dataset_percentage_usage = 100  # TODO: ?
-        valid_size = 0.1  # TODO?
+        dataset_percentage_usage = 100
+        valid_size = 0.1
         num_train = int(len(dataset_train) / 100 * dataset_percentage_usage)
         indices = list(range(num_train))
         split = int(np.floor(valid_size * num_train))
@@ -160,7 +160,12 @@ def eval_linear(args):
         if epoch % args.val_freq == 0 or epoch == args.epochs - 1:
             test_stats = validate_network(args, val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
             print(f"Accuracy at epoch {epoch} of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-            best_acc = max(best_acc, test_stats["acc1"])
+            if args.do_early_stopping:
+                print("Do early stopping")
+                best_acc = max(best_acc, test_stats["acc1"])
+            else:
+                print("Do NO early stopping")
+                best_acc = test_stats["acc1"]
             print(f'Max accuracy so far: {best_acc:.2f}%')
             log_stats = {**{k: v for k, v in log_stats.items()},
                          **{f'test_{k}': v for k, v in test_stats.items()}}
@@ -181,19 +186,14 @@ def eval_linear(args):
     if args.is_neps_run:
         print("OUTPUT_DIR: ", args.output_dir)
         with open(str(args.output_dir) + "/current_val_metric.txt", "w+") as f:
-            f.write(f"{best_acc}\n")  # TODO: return best or final performance?
+            f.write(f"{best_acc}\n")
 
 def train(args, model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     linear_classifier.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
-    counter = 0  # TODO: delete before starting NEPS
     for (inp, target) in metric_logger.log_every(loader, 20, header):
-        # TODO: delete before starting NEPS
-        if counter > 1:
-            break
-        counter += 1
 
         # move to gpu
         inp = inp.cuda(non_blocking=True)
@@ -236,12 +236,7 @@ def validate_network(args, val_loader, model, linear_classifier, n, avgpool):
     linear_classifier.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
-    counter = 0  # TODO: delete before starting NEPS
     for inp, target in metric_logger.log_every(val_loader, 20, header):
-        # TODO: delete before starting NEPS
-        if counter > 1:
-            break
-        counter += 1
         
         # move to gpu
         inp = inp.cuda(non_blocking=True)
@@ -323,5 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
     parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
     parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
+    parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
+    
     args = parser.parse_args()
     eval_linear(args)

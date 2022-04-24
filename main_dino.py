@@ -166,7 +166,7 @@ def dino_neps_main(working_directory, args, **hyperparameters):
     with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
         val_metric = f.read()
     print(f"val_metric: {val_metric}")
-    return val_metric
+    return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
 
 def train_dino(rank, working_directory, args, hyperparameters=None):
     utils.init_distributed_mode(args, rank) 
@@ -181,10 +181,10 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
         
         # Parameterize hyperparameters
         args.lr = hyperparameters["lr"]
-        # TODO: args.out_dim = hyperparameters["out_dim"]
+        args.out_dim = hyperparameters["out_dim"]
         args.momentum_teacher = hyperparameters["momentum_teacher"]
         args.warmup_teacher_temp = hyperparameters["warmup_teacher_temp"]
-        # TODO: args.warmup_teacher_temp_epochs = hyperparameters["warmup_teacher_temp_epochs"]
+        args.warmup_teacher_temp_epochs = hyperparameters["warmup_teacher_temp_epochs"]
         args.weight_decay = hyperparameters["weight_decay"]
         args.weight_decay_end = hyperparameters["weight_decay_end"]
         args.freeze_last_layer = hyperparameters["freeze_last_layer"]
@@ -192,10 +192,8 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
         args.min_lr = hyperparameters["min_lr"]
         args.drop_path_rate = hyperparameters["drop_path_rate"]
         args.optimizer = hyperparameters["optimizer"]
-        
-        # TODO: delete
-        if args.epochs < args.warmup_epochs:
-            args.warmup_epochs = args.epochs
+        args.use_bn_in_head = hyperparameters["use_bn_in_head"]
+        args.norm_last_layer = hyperparameters["norm_last_layer"] 
 
     # ============ preparing data ... ============
     transform = DataAugmentationDINO(
@@ -205,8 +203,8 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
     )
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
     if args.is_neps_run:
-        dataset_percentage_usage = 100  # TODO: ?
-        valid_size = 0.1  # TODO?
+        dataset_percentage_usage = 100
+        valid_size = 0.1
         num_train = int(len(dataset) / 100 * dataset_percentage_usage)
         indices = list(range(num_train))
         split = int(np.floor(valid_size * num_train))
@@ -405,6 +403,7 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
         finetuning_parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
         finetuning_parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
         finetuning_parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
+        finetuning_parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
         finetuning_args = finetuning_parser.parse_args()
         
         finetuning_args.arch = args.arch
@@ -415,7 +414,6 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
         finetuning_args.saveckp_freq = 10
         finetuning_args.pretrained_weights = str(finetuning_args.output_dir) + "/checkpoint.pth"
         
-        finetuning_args.epochs = 1  # TODO: Remove
 
         eval_linear(finetuning_args)
 
@@ -426,8 +424,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
-        if it > 1:
-            break
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
         for i, param_group in enumerate(optimizer.param_groups):
@@ -603,9 +599,9 @@ if __name__ == '__main__':
                     lr=neps.FloatParameter(
                         lower=0.00001, upper=0.01, log=True, default=0.0005, default_confidence="high"
                     ),
-                    # TODO: out_dim=neps.IntegerParameter(
-                    #     lower=60000, upper=70000, log=False, default=65536, default_confidence="high"
-                    # ),
+                    out_dim=neps.IntegerParameter(
+                        lower=1000, upper=100000, log=False, default=65536, default_confidence="high"
+                    ),
                     momentum_teacher=neps.FloatParameter(
                         lower=0.8, upper=1, log=True, default=0.996, default_confidence="high"
                     ),
@@ -616,10 +612,10 @@ if __name__ == '__main__':
                         lower=0, upper=50, log=False, default=0, default_confidence="high"
                     ),
                     weight_decay=neps.FloatParameter(
-                        lower=0.001, upper=0.1, log=True, default=0.04, default_confidence="high"
+                        lower=0.001, upper=0.5, log=True, default=0.04, default_confidence="high"
                     ),
                     weight_decay_end=neps.FloatParameter(
-                        lower=0.001, upper=0.1, log=True, default=0.4, default_confidence="high"
+                        lower=0.001, upper=0.5, log=True, default=0.4, default_confidence="high"
                     ),
                     freeze_last_layer=neps.IntegerParameter(
                         lower=0, upper=10, log=False, default=1, default_confidence="high"
@@ -633,19 +629,24 @@ if __name__ == '__main__':
                     drop_path_rate=neps.FloatParameter(
                         lower=0.01, upper=0.5, log=False, default=0.1, default_confidence="high"
                     ),
-                    optimizer=neps.CategoricalParameter(choices=['adamw', 'sgd', 'lars'], default='adamw', default_confidence="high"),
+                    optimizer=neps.CategoricalParameter(
+                        choices=['adamw', 'sgd', 'lars'], default='adamw', default_confidence="high"
+                    ),
+                    use_bn_in_head=neps.CategoricalParameter(
+                        choices=[True, False], default=False, default_confidence="high"
+                    ),
+                    norm_last_layer=neps.CategoricalParameter(
+                        choices=[True, False], default=True, default_confidence="high"
+                    ),
                 )
+       
         dino_neps_main = partial(dino_neps_main, args=args)
-
-        # TODO: Finetuning should be executed directly after pretraining by one single command
-        # TODO: We need a validation set
-        # TODO: The validation performance should be returned at the end of the finetuning part
         
         neps.run(
             run_pipeline=dino_neps_main,
             pipeline_space=pipeline_space,
             working_directory=args.output_dir,
-            max_evaluations_total=50,
+            max_evaluations_total=100,
             max_evaluations_per_run=1,
         )
 
