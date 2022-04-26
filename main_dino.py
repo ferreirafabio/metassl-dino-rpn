@@ -175,6 +175,12 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
+    for k, v in sorted(dict(vars(args)).items()):
+        if k in hyperparameters:
+            print(f"{k} : {hyperparameters[k]} (default: {v}) \n")
+        else:
+            print(f"{k} : {v}) \n")
+    
     # ============ DINO run with NEPS ============
     if args.is_neps_run:
         print("NEPS hyperparameters: ", hyperparameters)
@@ -200,6 +206,7 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
         args.global_crops_scale,
         args.local_crops_scale,
         args.local_crops_number,
+        hyperparameters,
     )
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
     if args.is_neps_run:
@@ -344,78 +351,85 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
 
     start_time = time.time()
     print("Starting DINO training !")
-    for epoch in range(start_epoch, args.epochs):
-        data_loader.sampler.set_epoch(epoch)
-
-        # ============ training one epoch of DINO ... ============
-        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
-            data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-            epoch, fp16_scaler, args)
-
-        # ============ writing logs ... ============
-        save_dict = {
-            'student': student.state_dict(),
-            'teacher': teacher.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'epoch': epoch + 1,
-            'args': args,
-            'dino_loss': dino_loss.state_dict(),
-        }
-        if fp16_scaler is not None:
-            save_dict['fp16_scaler'] = fp16_scaler.state_dict()
-        utils.save_on_master(save_dict, os.path.join(args.output_dir, 'checkpoint.pth'))
-        if args.saveckp_freq and epoch % args.saveckp_freq == 0:
-            utils.save_on_master(save_dict, os.path.join(args.output_dir, f'checkpoint{epoch:04}.pth'))
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     'epoch': epoch}
-        if utils.is_main_process():
-            with (Path(args.output_dir) / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
-
-    if args.is_neps_run:
-        print("\n\n\nStarting Finetuning\n\n\n")
-        finetuning_parser = argparse.ArgumentParser('Evaluation with linear classification on ImageNet')
-        finetuning_parser.add_argument('--n_last_blocks', default=4, type=int, help="""Concatenate [CLS] tokens
-        for the `n` last blocks. We use `n=4` when evaluating ViT-Small and `n=1` with ViT-Base.""")
-        finetuning_parser.add_argument('--avgpool_patchtokens', default=False, type=utils.bool_flag,
-        help="""Whether ot not to concatenate the global average pooled features to the [CLS] token.
-        We typically set this to False for ViT-Small and to True with ViT-Base.""")
-        finetuning_parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')
-        finetuning_parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
-        finetuning_parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
-        finetuning_parser.add_argument("--checkpoint_key", default="teacher", type=str, help='Key to use in the checkpoint (example: "teacher")')
-        finetuning_parser.add_argument('--epochs', default=100, type=int, help='Number of epochs of training.')
-        finetuning_parser.add_argument("--lr", default=0.001, type=float, help="""Learning rate at the beginning of
-        training (highest LR used during training). The learning rate is linearly scaled
-        with the batch size, and specified here for a reference batch size of 256.
-        We recommend tweaking the LR depending on the checkpoint evaluated.""")
-        finetuning_parser.add_argument('--batch_size_per_gpu', default=128, type=int, help='Per-GPU batch-size')
-        finetuning_parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
-        distributed training; see https://pytorch.org/docs/stable/distributed.html""")
-        finetuning_parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
-        finetuning_parser.add_argument('--data_path', default='/path/to/imagenet/', type=str)
-        finetuning_parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
-        finetuning_parser.add_argument('--val_freq', default=1, type=int, help="Epoch frequency for validation.")
-        finetuning_parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
-        finetuning_parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
-        finetuning_parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
-        finetuning_parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
-        finetuning_parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
-        finetuning_args = finetuning_parser.parse_args()
-        
-        finetuning_args.arch = args.arch
-        finetuning_args.data_path = "/data/datasets/ImageNet/imagenet-pytorch/"
-        finetuning_args.output_dir = args.output_dir
-        finetuning_args.is_neps_run = args.is_neps_run
-        finetuning_args.gpu = args.gpu
-        finetuning_args.saveckp_freq = 10
-        finetuning_args.pretrained_weights = str(finetuning_args.output_dir) + "/checkpoint.pth"
-        
-
-        eval_linear(finetuning_args)
+    
+    try:
+        for epoch in range(start_epoch, args.epochs):
+            data_loader.sampler.set_epoch(epoch)
+    
+            # ============ training one epoch of DINO ... ============
+            train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
+                data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
+                epoch, fp16_scaler, args)
+    
+            # ============ writing logs ... ============
+            save_dict = {
+                'student': student.state_dict(),
+                'teacher': teacher.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'epoch': epoch + 1,
+                'args': args,
+                'dino_loss': dino_loss.state_dict(),
+            }
+            if fp16_scaler is not None:
+                save_dict['fp16_scaler'] = fp16_scaler.state_dict()
+            utils.save_on_master(save_dict, os.path.join(args.output_dir, 'checkpoint.pth'))
+            if args.saveckp_freq and epoch % args.saveckp_freq == 0:
+                utils.save_on_master(save_dict, os.path.join(args.output_dir, f'checkpoint{epoch:04}.pth'))
+            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                         'epoch': epoch}
+            if utils.is_main_process():
+                with (Path(args.output_dir) / "log.txt").open("a") as f:
+                    f.write(json.dumps(log_stats) + "\n")
+        total_time = time.time() - start_time
+        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+        print('Training time {}'.format(total_time_str))
+    
+        if args.is_neps_run:
+            print("\n\n\nStarting Finetuning\n\n\n")
+            finetuning_parser = argparse.ArgumentParser('Evaluation with linear classification on ImageNet')
+            finetuning_parser.add_argument('--n_last_blocks', default=4, type=int, help="""Concatenate [CLS] tokens
+            for the `n` last blocks. We use `n=4` when evaluating ViT-Small and `n=1` with ViT-Base.""")
+            finetuning_parser.add_argument('--avgpool_patchtokens', default=False, type=utils.bool_flag,
+            help="""Whether ot not to concatenate the global average pooled features to the [CLS] token.
+            We typically set this to False for ViT-Small and to True with ViT-Base.""")
+            finetuning_parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')
+            finetuning_parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
+            finetuning_parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
+            finetuning_parser.add_argument("--checkpoint_key", default="teacher", type=str, help='Key to use in the checkpoint (example: "teacher")')
+            finetuning_parser.add_argument('--epochs', default=100, type=int, help='Number of epochs of training.')
+            finetuning_parser.add_argument("--lr", default=0.001, type=float, help="""Learning rate at the beginning of
+            training (highest LR used during training). The learning rate is linearly scaled
+            with the batch size, and specified here for a reference batch size of 256.
+            We recommend tweaking the LR depending on the checkpoint evaluated.""")
+            finetuning_parser.add_argument('--batch_size_per_gpu', default=128, type=int, help='Per-GPU batch-size')
+            finetuning_parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
+            distributed training; see https://pytorch.org/docs/stable/distributed.html""")
+            finetuning_parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+            finetuning_parser.add_argument('--data_path', default='/path/to/imagenet/', type=str)
+            finetuning_parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
+            finetuning_parser.add_argument('--val_freq', default=1, type=int, help="Epoch frequency for validation.")
+            finetuning_parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
+            finetuning_parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
+            finetuning_parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
+            finetuning_parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
+            finetuning_parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
+            finetuning_args = finetuning_parser.parse_args()
+            
+            finetuning_args.arch = args.arch
+            finetuning_args.data_path = "/data/datasets/ImageNet/imagenet-pytorch/"
+            finetuning_args.output_dir = args.output_dir
+            finetuning_args.is_neps_run = args.is_neps_run
+            finetuning_args.gpu = args.gpu
+            finetuning_args.saveckp_freq = 10
+            finetuning_args.pretrained_weights = str(finetuning_args.output_dir) + "/checkpoint.pth"
+            
+            eval_linear(finetuning_args)
+            
+    except ValueError:
+        if args.is_neps_run:
+            print("OUTPUT_DIR: ", args.output_dir)
+            with open(str(args.output_dir) + "/current_val_metric.txt", "w+") as f:
+                f.write(f"{0}\n")
 
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
@@ -441,7 +455,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
-            sys.exit(1)
+            raise ValueError("Loss value is invalid.")
 
         # student update
         optimizer.zero_grad()
@@ -537,15 +551,19 @@ class DINOLoss(nn.Module):
 
 
 class DataAugmentationDINO(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
-        flip_and_color_jitter = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomApply(
-                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
-                p=0.8
-            ),
-            transforms.RandomGrayscale(p=0.2),
-        ])
+    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number, hyperparameters):
+        p_horizontal_crop_1 = hyperparameters["p_horizontal_crop_1"]
+        p_colorjitter_crop_1 = hyperparameters["p_colorjitter_crop_1"]
+        p_grayscale_crop_1 = hyperparameters["p_grayscale_crop_1"]
+        
+        p_horizontal_crop_2 = hyperparameters["p_horizontal_crop_2"]
+        p_colorjitter_crop_2 = hyperparameters["p_colorjitter_crop_2"]
+        p_grayscale_crop_2 = hyperparameters["p_grayscale_crop_2"]
+
+        p_horizontal_crop_3 = hyperparameters["p_horizontal_crop_3"]
+        p_colorjitter_crop_3 = hyperparameters["p_colorjitter_crop_3"]
+        p_grayscale_crop_3 = hyperparameters["p_grayscale_crop_3"]
+        
         normalize = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
@@ -554,14 +572,28 @@ class DataAugmentationDINO(object):
         # first global crop
         self.global_transfo1 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
+            
+            transforms.RandomHorizontalFlip(p=p_horizontal_crop_1),
+            transforms.RandomApply(
+                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                p=p_colorjitter_crop_1
+                ),
+            transforms.RandomGrayscale(p=p_grayscale_crop_1),
+            
             utils.GaussianBlur(1.0),
             normalize,
         ])
         # second global crop
         self.global_transfo2 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
+    
+            transforms.RandomHorizontalFlip(p=p_horizontal_crop_2),
+            transforms.RandomApply(
+                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                p=p_colorjitter_crop_2
+                ),
+            transforms.RandomGrayscale(p=p_grayscale_crop_2),
+            
             utils.GaussianBlur(0.1),
             utils.Solarization(0.2),
             normalize,
@@ -570,7 +602,14 @@ class DataAugmentationDINO(object):
         self.local_crops_number = local_crops_number
         self.local_transfo = transforms.Compose([
             transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
+    
+            transforms.RandomHorizontalFlip(p=p_horizontal_crop_3),
+            transforms.RandomApply(
+                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                p=p_colorjitter_crop_3
+                ),
+            transforms.RandomGrayscale(p=p_grayscale_crop_3),
+            
             utils.GaussianBlur(p=0.5),
             normalize,
         ])
@@ -611,7 +650,7 @@ if __name__ == '__main__':
                     warmup_teacher_temp_epochs=neps.IntegerParameter(
                         lower=0, upper=50, log=False, default=0, default_confidence="high"
                     ),
-                    weight_decay=neps.FloatParameter(
+                    weight_decay=neps.FloatParameter( # todo: decrease or try-except with loss=0
                         lower=0.001, upper=0.5, log=True, default=0.04, default_confidence="high"
                     ),
                     weight_decay_end=neps.FloatParameter(
@@ -637,6 +676,33 @@ if __name__ == '__main__':
                     ),
                     norm_last_layer=neps.CategoricalParameter(
                         choices=[True, False], default=True, default_confidence="high"
+                    ),
+                    p_horizontal_crop_1=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.5, default_confidence="high"
+                    ),
+                    p_colorjitter_crop_1=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.8, default_confidence="high"
+                    ),
+                    p_grayscale_crop_1=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.2, default_confidence="high"
+                    ),
+                    p_horizontal_crop_2=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.5, default_confidence="high"
+                    ),
+                    p_colorjitter_crop_2=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.8, default_confidence="high"
+                    ),
+                    p_grayscale_crop_2=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.2, default_confidence="high"
+                    ),
+                    p_horizontal_crop_3=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.5, default_confidence="high"
+                    ),
+                    p_colorjitter_crop_3=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.8, default_confidence="high"
+                    ),
+                    p_grayscale_crop_3=neps.FloatParameter(
+                        lower=0., upper=1., log=False, default=0.2, default_confidence="high"
                     ),
                 )
        
