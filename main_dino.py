@@ -181,12 +181,6 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
             print(f"{k} : {v}) \n")
 
     cudnn.benchmark = True
-
-    for k, v in sorted(dict(vars(args)).items()):
-        if k in hyperparameters:
-            print(f"{k} : {hyperparameters[k]} (default: {v}) \n")
-        else:
-            print(f"{k} : {v}) \n")
     
     # ============ DINO run with NEPS ============
     if args.is_neps_run:
