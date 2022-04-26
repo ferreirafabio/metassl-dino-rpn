@@ -172,7 +172,14 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
     utils.init_distributed_mode(args, rank) 
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
-    print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
+    # print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
+    
+    for k, v in sorted(dict(vars(args)).items()):
+        if k in hyperparameters:
+            print(f"{k} : {hyperparameters[k]} (default: {v}) \n")
+        else:
+            print(f"{k} : {v}) \n")
+
     cudnn.benchmark = True
 
     # ============ DINO run with NEPS ============
