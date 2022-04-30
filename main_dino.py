@@ -217,12 +217,14 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
         num_train = int(len(dataset) / 100 * dataset_percentage_usage)
         indices = list(range(num_train))
         split = int(np.floor(valid_size * num_train))
+        
+        np.random.shuffle(indices)
 
         if np.isclose(valid_size, 0.0):
             train_idx, valid_idx = indices, indices
         else:
             train_idx, valid_idx = indices[split:], indices[:split]
-
+        
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
     else:
         sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
@@ -424,6 +426,9 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
             finetuning_args.gpu = args.gpu
             finetuning_args.saveckp_freq = 10
             finetuning_args.pretrained_weights = str(finetuning_args.output_dir) + "/checkpoint.pth"
+            finetuning_args.seed = args.seed 
+            finetuning_args.assert_valid_idx = valid_idx[:10]
+            finetuning_args.assert_train_idx = train_idx[:10]
             
             eval_linear(finetuning_args)
             

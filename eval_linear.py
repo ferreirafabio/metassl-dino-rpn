@@ -30,6 +30,7 @@ import vision_transformer as vits
 
 
 def eval_linear(args):
+    utils.fix_random_seeds(args.seed)
     if args.is_neps_run:
         pass  # utils.init_distributed_mode(args) done in pretraining
     else:
@@ -90,11 +91,15 @@ def eval_linear(args):
         num_train = int(len(dataset_train) / 100 * dataset_percentage_usage)
         indices = list(range(num_train))
         split = int(np.floor(valid_size * num_train))
+        
+        np.random.shuffle(indices)
 
         if np.isclose(valid_size, 0.0):
             train_idx, valid_idx = indices, indices
         else:
             train_idx, valid_idx = indices[split:], indices[:split]
+        
+        assert valid_idx[:10] == args.assert_valid_idx
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
         valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_idx)
