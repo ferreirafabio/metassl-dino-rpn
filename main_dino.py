@@ -213,7 +213,7 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
     if args.is_neps_run:
         dataset_percentage_usage = 100
-        valid_size = 0.1
+        valid_size = 0.2
         num_train = int(len(dataset) / 100 * dataset_percentage_usage)
         indices = list(range(num_train))
         split = int(np.floor(valid_size * num_train))
