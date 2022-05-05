@@ -153,8 +153,17 @@ def eval_linear(args):
     )
     start_epoch = to_restore["epoch"]
     best_acc = to_restore["best_acc"]
+    
+    if int(args.epoch_fidelity) == 6:
+        epoch_end_range = 25
+    elif (args.epoch_fidelity) == 25:
+        epoch_end_range = 50
+    elif (args.epoch_fidelity) == 100:
+        epoch_end_range = 100
+    else:
+        raise NotImplementedError("Wrong epoch_fidelity")
 
-    for epoch in range(start_epoch, args.epochs):
+    for epoch in range(start_epoch, epoch_end_range):  # TODO: fix for DINO baseline
         train_loader.sampler.set_epoch(epoch)
 
         train_stats = train(args, model, linear_classifier, optimizer, train_loader, epoch, args.n_last_blocks, args.avgpool_patchtokens)
@@ -199,7 +208,6 @@ def train(args, model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     for (inp, target) in metric_logger.log_every(loader, 20, header):
-
         # move to gpu
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
@@ -242,7 +250,6 @@ def validate_network(args, val_loader, model, linear_classifier, n, avgpool):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
     for inp, target in metric_logger.log_every(val_loader, 20, header):
-        
         # move to gpu
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)

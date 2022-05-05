@@ -147,7 +147,7 @@ def find_free_port():
         return s.getsockname()[1]
 
 
-def dino_neps_main(working_directory, args, **hyperparameters):
+def dino_neps_main(working_directory, previous_working_directory, args, **hyperparameters):
     args.output_dir = working_directory
     ngpus_per_node = torch.cuda.device_count()
     print(f"--------------{ngpus_per_node}-------------")
@@ -155,12 +155,14 @@ def dino_neps_main(working_directory, args, **hyperparameters):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(find_free_port())
     #args.rank = int()
-
-    mp.spawn(
-            train_dino,
-            nprocs=ngpus_per_node,
-            args=(working_directory, args, hyperparameters)
-            )
+    try:
+        mp.spawn(
+                train_dino,
+                nprocs=ngpus_per_node,
+                args=(working_directory, previous_working_directory, args, hyperparameters)
+                )
+    except:
+        return 0
 
     # Return validation metric
     with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
@@ -168,7 +170,7 @@ def dino_neps_main(working_directory, args, **hyperparameters):
     print(f"val_metric: {val_metric}")
     return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
 
-def train_dino(rank, working_directory, args, hyperparameters=None):
+def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
     utils.init_distributed_mode(args, rank) 
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
@@ -342,22 +344,33 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
 
     # ============ optionally resume training ... ============
     to_restore = {"epoch": 0}
-    utils.restart_from_checkpoint(
-        os.path.join(args.output_dir, "checkpoint.pth"),
-        run_variables=to_restore,
-        student=student,
-        teacher=teacher,
-        optimizer=optimizer,
-        fp16_scaler=fp16_scaler,
-        dino_loss=dino_loss,
-    )
+    if previous_working_directory is not None:
+        utils.restart_from_checkpoint(
+            os.path.join(previous_working_directory, "checkpoint.pth"), 
+            run_variables=to_restore,
+            student=student,
+            teacher=teacher,
+            optimizer=optimizer,
+            fp16_scaler=fp16_scaler,
+            dino_loss=dino_loss,
+        )
+    else:
+        utils.restart_from_checkpoint(
+            os.path.join(args.output_dir, "checkpoint.pth"),  # for DINO baseline
+            run_variables=to_restore,
+            student=student,
+            teacher=teacher,
+            optimizer=optimizer,
+            fp16_scaler=fp16_scaler,
+            dino_loss=dino_loss,
+        )
     start_epoch = to_restore["epoch"]
 
     start_time = time.time()
     print("Starting DINO training !")
-    
+   
     try:
-        for epoch in range(start_epoch, args.epochs):
+        for epoch in range(start_epoch, hyperparameters["epoch_fidelity"]):
             data_loader.sampler.set_epoch(epoch)
     
             # ============ training one epoch of DINO ... ============
@@ -429,6 +442,9 @@ def train_dino(rank, working_directory, args, hyperparameters=None):
             finetuning_args.seed = args.seed 
             finetuning_args.assert_valid_idx = valid_idx[:10]
             finetuning_args.assert_train_idx = train_idx[:10]
+            
+            finetuning_args.epochs = 100  # TODO: args.epochs
+            finetuning_args.epoch_fidelity = hyperparameters["epoch_fidelity"]
             
             eval_linear(finetuning_args)
             
@@ -711,6 +727,7 @@ if __name__ == '__main__':
                     p_grayscale_crop_3=neps.FloatParameter(
                         lower=0., upper=1., log=False, default=0.2, default_confidence="high"
                     ),
+                    epoch_fidelity=neps.IntegerParameter(lower=1, upper=args.epochs, is_fidelity=True),
                 )
        
         dino_neps_main = partial(dino_neps_main, args=args)
@@ -719,10 +736,12 @@ if __name__ == '__main__':
             run_pipeline=dino_neps_main,
             pipeline_space=pipeline_space,
             working_directory=args.output_dir,
-            max_evaluations_total=100,
+            max_evaluations_total=10000,
             max_evaluations_per_run=1,
+            eta=4,
+            early_stopping_rate=1,
         )
 
     # Default DINO run
     else:
-        train_dino(args)
+        pass  # TODO
