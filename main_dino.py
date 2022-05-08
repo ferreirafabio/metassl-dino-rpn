@@ -134,6 +134,8 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+    parser.add_argument("--world_size", default=10, type=int, help="default is for NEPS mode with DDP, so 10.")
+    parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     return parser
 
 
@@ -150,43 +152,47 @@ def find_free_port():
 def dino_neps_main(working_directory, previous_working_directory, args, **hyperparameters):
     args.output_dir = working_directory
     ngpus_per_node = torch.cuda.device_count()
-    print(f"--------------{ngpus_per_node}-------------")
-    args.world_size = 1
+    print(f"Number of GPUs per node detected: {ngpus_per_node}")
+    # args.world_size = 1
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(find_free_port())
-    #args.rank = int()
-    try:
-        mp.spawn(
-                train_dino,
-                nprocs=ngpus_per_node,
-                args=(working_directory, previous_working_directory, args, hyperparameters)
-                )
-    except:
-        return 0
-
-    # Return validation metric
-    with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
-        val_metric = f.read()
-    print(f"val_metric: {val_metric}")
-    return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
+    
+    if args.is_neps_run:
+        try:
+            mp.spawn(
+                    train_dino,
+                    nprocs=ngpus_per_node,
+                    args=(working_directory, previous_working_directory, args, hyperparameters)
+                    )
+        except:
+            return 0
+    
+        # Return validation metric
+        with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
+            val_metric = f.read()
+        print(f"val_metric: {val_metric}")
+        return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
+    else:
+        os.environ["WORLD_SIZE"] = str(args.world_size)
+        train_dino(None, args.output_dir, args.output_dir, args)
+        
 
 def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
     utils.init_distributed_mode(args, rank) 
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
-    # print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
-
-    args_dict = dict(vars(args))
-    for k, v in hyperparameters.items():
-        if k in args_dict:
-            print(f"{k} : {args_dict[k]} (default: {v}) \n")
-        else:
-            print(f"{k} : {v}) \n")
-
+    
     cudnn.benchmark = True
     
     # ============ DINO run with NEPS ============
     if args.is_neps_run:
+        args_dict = dict(vars(args))
+        for k, v in hyperparameters.items():
+            if k in args_dict:
+                print(f"{k} : {args_dict[k]} (default: {v}) \n")
+            else:
+                print(f"{k} : {v}) \n")
+                
         print("NEPS hyperparameters: ", hyperparameters)
         
         # Parameterize hyperparameters
@@ -203,13 +209,17 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         args.drop_path_rate = hyperparameters["drop_path_rate"]
         args.optimizer = hyperparameters["optimizer"]
         args.use_bn_in_head = hyperparameters["use_bn_in_head"]
-        args.norm_last_layer = hyperparameters["norm_last_layer"] 
+        args.norm_last_layer = hyperparameters["norm_last_layer"]
+        
+    else:
+        print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
     # ============ preparing data ... ============
     transform = DataAugmentationDINO(
         args.global_crops_scale,
         args.local_crops_scale,
         args.local_crops_number,
+        args.is_neps_run,
         hyperparameters,
     )
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
@@ -368,9 +378,14 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     start_time = time.time()
     print("Starting DINO training !")
+    
+    if args.is_neps_run:
+        end_epoch = hyperparameters["epoch_fidelity"]
+    else:
+        end_epoch = args.epochs
    
     try:
-        for epoch in range(start_epoch, hyperparameters["epoch_fidelity"]):
+        for epoch in range(start_epoch, end_epoch):
             data_loader.sampler.set_epoch(epoch)
     
             # ============ training one epoch of DINO ... ============
@@ -574,19 +589,24 @@ class DINOLoss(nn.Module):
 
 
 class DataAugmentationDINO(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number, hyperparameters):
-        p_horizontal_crop_1 = hyperparameters["p_horizontal_crop_1"]
-        p_colorjitter_crop_1 = hyperparameters["p_colorjitter_crop_1"]
-        p_grayscale_crop_1 = hyperparameters["p_grayscale_crop_1"]
-        
-        p_horizontal_crop_2 = hyperparameters["p_horizontal_crop_2"]
-        p_colorjitter_crop_2 = hyperparameters["p_colorjitter_crop_2"]
-        p_grayscale_crop_2 = hyperparameters["p_grayscale_crop_2"]
-
-        p_horizontal_crop_3 = hyperparameters["p_horizontal_crop_3"]
-        p_colorjitter_crop_3 = hyperparameters["p_colorjitter_crop_3"]
-        p_grayscale_crop_3 = hyperparameters["p_grayscale_crop_3"]
-        
+    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number, is_neps_run, hyperparameters):
+        if is_neps_run:
+            p_horizontal_crop_1 = hyperparameters["p_horizontal_crop_1"]
+            p_colorjitter_crop_1 = hyperparameters["p_colorjitter_crop_1"]
+            p_grayscale_crop_1 = hyperparameters["p_grayscale_crop_1"]
+            
+            p_horizontal_crop_2 = hyperparameters["p_horizontal_crop_2"]
+            p_colorjitter_crop_2 = hyperparameters["p_colorjitter_crop_2"]
+            p_grayscale_crop_2 = hyperparameters["p_grayscale_crop_2"]
+    
+            p_horizontal_crop_3 = hyperparameters["p_horizontal_crop_3"]
+            p_colorjitter_crop_3 = hyperparameters["p_colorjitter_crop_3"]
+            p_grayscale_crop_3 = hyperparameters["p_grayscale_crop_3"]
+        else:
+            p_horizontal_crop_1, p_colorjitter_crop_1, p_grayscale_crop_1 = 0.5, 0.8, 0.2
+            p_horizontal_crop_2, p_colorjitter_crop_2, p_grayscale_crop_2 = 0.5, 0.8, 0.2
+            p_horizontal_crop_3, p_colorjitter_crop_3, p_grayscale_crop_3 = 0.5, 0.8, 0.2
+            
         normalize = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
@@ -744,4 +764,4 @@ if __name__ == '__main__':
 
     # Default DINO run
     else:
-        pass  # TODO
+        dino_neps_main(args.output_dir, args.output_dir, args)
