@@ -21,6 +21,7 @@ import json
 import neps
 import logging
 from pathlib import Path
+import pickle
 
 import numpy as np
 from PIL import Image
@@ -758,10 +759,10 @@ if __name__ == '__main__':
         #dino_neps_main = partial(dino_neps_main, args=args)
         def main():
             with Path(args.config_file_path).open('r') as f:
-                dct_to_load = json.load(f)
-                hypers = dct_to_load['hypers']
-                working_directory = dct_to_load['working_directory']
-                previous_working_directory = dct_to_load['working_directory']
+                dct_to_load = pickle.load(f)
+            hypers = dct_to_load['hypers']
+            working_directory = dct_to_load['working_directory']
+            previous_working_directory = dct_to_load['working_directory']
                 
             return dino_neps_main(working_directory=working_directory, previous_working_directory=previous_working_directory,
                                   args=args, hyperparameters=hypers)
@@ -770,7 +771,7 @@ if __name__ == '__main__':
         def main_master(working_directory, previous_working_directory, **hypers):
             dct_to_dump = {"working_directory": working_directory, "previous_working_directory": previous_working_directory, "hypers": hypers}
             with Path(args.config_file_path).open('w') as f:
-                json.dump(dct_to_dump, f)
+                pickle.dump(dct_to_dump, f)
             torch.distributed.barrier()
             return main()
             
