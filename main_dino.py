@@ -136,6 +136,7 @@ def get_args_parser():
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
+    parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
     return parser
 
 
@@ -159,19 +160,22 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
     
     if args.is_neps_run:
         try:
-            mp.spawn(
-                    train_dino,
-                    nprocs=ngpus_per_node,
-                    args=(working_directory, previous_working_directory, args, hyperparameters)
-                    )
+            train_dino(torch.distributed.get_rank(), working_directory, previous_working_directory, args, hyperparameters)
+            # mp.spawn(
+            #         train_dino,
+            #         nprocs=ngpus_per_node,
+            #         args=(working_directory, previous_working_directory, args, hyperparameters)
+            #         )
         except:
             return 0
-    
-        # Return validation metric
-        with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
-            val_metric = f.read()
-        print(f"val_metric: {val_metric}")
-        return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
+
+        if torch.distributed.get_rank() == 0: # assumption: rank, running neps is 0
+            # Return validation metric
+            with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
+                val_metric = f.read()
+            print(f"val_metric: {val_metric}")
+            return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
+        return 0
     else:
         os.environ["WORLD_SIZE"] = str(args.world_size)
         train_dino(None, args.output_dir, args.output_dir, args)
@@ -751,20 +755,43 @@ if __name__ == '__main__':
                     epoch_fidelity=neps.IntegerParameter(lower=1, upper=args.epochs, is_fidelity=True),
                 )
        
-        dino_neps_main = partial(dino_neps_main, args=args)
-        def main(**hypers):
-            if 
+        #dino_neps_main = partial(dino_neps_main, args=args)
+        def main():
+            with Path(args.config_file_path).open('r') as f:
+                dct_to_load = json.load(f)
+                hypers = dct_to_load['hypers']
+                working_dir = dct_to_load['working_dir']
+                prev_working_dir = dct_to_load['prev_working_dir']
+                
+            return dino_neps_main(working_dir=working_dir, previous_working_directory=prev_working_dir,
+                                  args=args, hyperparameters=hypers)
+
+
+        def main_master(working_dir, prev_working_dir, **hypers):
+            dct_to_dump = {"working_dir": working_dir, "prev_working_dir": prev_working_dir, "hypers": hypers}
+            with Path(args.config_file_path).open('w') as f:
+                json.dump(dct_to_dump, f)
+            torch.distributed.barrier()
+            return main()
+            
         
-        if torch.distributed.ranki
-        neps.run(
-            run_pipeline=dino_neps_main,
-            pipeline_space=pipeline_space,
-            working_directory=args.output_dir,
-            max_evaluations_total=10000,
-            max_evaluations_per_run=1,
-            eta=4,
-            early_stopping_rate=1,
-        )
+        def main_worker():
+            torch.distributed.barrier()
+            main()
+            
+        
+        if torch.distributed.get_rank() == 0:
+            neps.run(
+                run_pipeline=main_master,
+                pipeline_space=pipeline_space,
+                working_directory=args.output_dir,
+                max_evaluations_total=10000,
+                max_evaluations_per_run=1,
+                eta=4,
+                early_stopping_rate=1,
+            )
+        else:
+            main_worker()
 
     # Default DINO run
     else:
