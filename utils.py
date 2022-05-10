@@ -466,10 +466,12 @@ def setup_for_distributed(is_master):
 
 def init_distributed_mode(args, rank):
     if args.is_neps_run:
-        args.world_size = args.world_size
-        args.gpu = args.gpu
+        if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+            args.rank = int(os.environ["RANK"])
+            args.world_size = int(os.environ['WORLD_SIZE'])
+            args.gpu = int(os.environ['LOCAL_RANK'])
         # launched with submitit on a slurm cluster
-        if 'SLURM_PROCID' in os.environ:
+        elif 'SLURM_PROCID' in os.environ:
             # args.rank = int(os.environ['SLURM_PROCID'])
             args.rank = rank
             args.gpu = args.rank % torch.cuda.device_count()
@@ -489,7 +491,6 @@ def init_distributed_mode(args, rank):
             args.rank = int(os.environ["RANK"])
             args.world_size = int(os.environ['WORLD_SIZE'])
             args.gpu = int(os.environ['LOCAL_RANK'])
-            args.rank = int(os.environ["RANK"])
         if 'SLURM_PROCID' in os.environ:
             args.rank = int(os.environ['SLURM_PROCID'])
             args.gpu = args.rank % torch.cuda.device_count()

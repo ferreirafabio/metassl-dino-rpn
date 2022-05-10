@@ -134,7 +134,7 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
-    parser.add_argument("--world_size", default=10, type=int, help="default is for NEPS mode with DDP, so 10.")
+    parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     return parser
 
@@ -178,7 +178,7 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
         
 
 def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
-    utils.init_distributed_mode(args, rank) 
+    #utils.init_distributed_mode(args, rank) 
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
     
@@ -673,6 +673,7 @@ if __name__ == '__main__':
     
     # DINO run with NEPS
     if args.is_neps_run:
+        utils.init_distributed_mode(args, None)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
@@ -751,7 +752,10 @@ if __name__ == '__main__':
                 )
        
         dino_neps_main = partial(dino_neps_main, args=args)
+        def main(**hypers):
+            if 
         
+        if torch.distributed.ranki
         neps.run(
             run_pipeline=dino_neps_main,
             pipeline_space=pipeline_space,
