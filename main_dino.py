@@ -760,15 +760,15 @@ if __name__ == '__main__':
             with Path(args.config_file_path).open('r') as f:
                 dct_to_load = json.load(f)
                 hypers = dct_to_load['hypers']
-                working_dir = dct_to_load['working_dir']
-                prev_working_dir = dct_to_load['prev_working_dir']
+                working_directory = dct_to_load['working_directory']
+                previous_working_directory = dct_to_load['working_directory']
                 
-            return dino_neps_main(working_dir=working_dir, previous_working_directory=prev_working_dir,
+            return dino_neps_main(working_directory=working_directory, previous_working_directory=previous_working_directory,
                                   args=args, hyperparameters=hypers)
 
 
-        def main_master(working_dir, prev_working_dir, **hypers):
-            dct_to_dump = {"working_dir": working_dir, "prev_working_dir": prev_working_dir, "hypers": hypers}
+        def main_master(working_directory, previous_working_directory, **hypers):
+            dct_to_dump = {"working_directory": working_directory, "previous_working_directory": previous_working_directory, "hypers": hypers}
             with Path(args.config_file_path).open('w') as f:
                 json.dump(dct_to_dump, f)
             torch.distributed.barrier()
