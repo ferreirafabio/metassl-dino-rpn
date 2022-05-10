@@ -198,7 +198,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             else:
                 print(f"{k} : {v}) \n")
                 
-        print("NEPS hyperparameters: ", hyperparameters, force=True)
+        print("NEPS hyperparameters: ", hyperparameters)
         
         # Parameterize hyperparameters
         args.lr = hyperparameters["lr"]
