@@ -765,7 +765,7 @@ if __name__ == '__main__':
             previous_working_directory = dct_to_load['working_directory']
                 
             return dino_neps_main(working_directory=working_directory, previous_working_directory=previous_working_directory,
-                                  args=args, hyperparameters=hypers)
+                                  args=args, **hypers)
 
 
         def main_master(working_directory, previous_working_directory, **hypers):

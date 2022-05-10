@@ -4,7 +4,6 @@
 #SBATCH -J dino_neps_hpo
 #SBATCH -t 5-23:59:59  # 23:59:59
 #SBATCH --array 0-9999%10
-echo "HI"
 
 source /home/ferreira/.profile
 source activate dino
