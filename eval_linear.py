@@ -331,6 +331,9 @@ if __name__ == '__main__':
     parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
     parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
     parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
+    parser.add_argument("--world_size", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
+    parser.add_argument("--gpu", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
+    parser.add_argument('--config_file_path', help="actually not needed here -- just for avoiding unrecognized arguments error")
     
     args = parser.parse_args()
     eval_linear(args)
