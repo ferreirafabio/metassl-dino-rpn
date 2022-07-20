@@ -161,9 +161,10 @@ def eval_linear(args):
     elif (args.epoch_fidelity) == 100:
         epoch_end_range = 100
     else:
-        raise NotImplementedError("Wrong epoch_fidelity")
+        # is_neps_run == False
+        epoch_end_range = args.epochs
 
-    for epoch in range(start_epoch, epoch_end_range):  # TODO: fix for DINO baseline
+    for epoch in range(start_epoch, epoch_end_range):
         train_loader.sampler.set_epoch(epoch)
 
         train_stats = train(args, model, linear_classifier, optimizer, train_loader, epoch, args.n_last_blocks, args.avgpool_patchtokens)
@@ -323,7 +324,7 @@ if __name__ == '__main__':
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
-    parser.add_argument('--data_path', default='/path/to/imagenet/', type=str)
+    parser.add_argument('--data_path', default='/data/datasets/ImageNet/imagenet-pytorch/', type=str)
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument('--val_freq', default=1, type=int, help="Epoch frequency for validation.")
     parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
