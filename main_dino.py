@@ -155,18 +155,13 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
     args.output_dir = working_directory
     ngpus_per_node = torch.cuda.device_count()
     print(f"Number of GPUs per node detected: {ngpus_per_node}")
-    # args.world_size = 1
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(find_free_port())
+    os.environ["MASTER_PORT"] = '29500'
+    # os.environ["MASTER_PORT"] = str(find_free_port())
     
     if args.is_neps_run:
         try:
             train_dino(torch.distributed.get_rank(), working_directory, previous_working_directory, args, hyperparameters)
-            # mp.spawn(
-            #         train_dino,
-            #         nprocs=ngpus_per_node,
-            #         args=(working_directory, previous_working_directory, args, hyperparameters)
-            #         )
         except:
             return 0
 
@@ -183,7 +178,9 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
         
 
 def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
-    #utils.init_distributed_mode(args, rank) 
+    if not args.is_neps_run:
+        print(f"init distributed mode executed")
+        utils.init_distributed_mode(args, rank)
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
     
@@ -799,4 +796,4 @@ if __name__ == '__main__':
 
     # Default DINO run
     else:
-        dino_neps_main(args.output_dir, args.output_dir, args)
+        dino_neps_main(args.output_dir, previous_working_directory=None, args=args)
