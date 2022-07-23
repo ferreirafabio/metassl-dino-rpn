@@ -21,6 +21,7 @@ import json
 import neps
 import logging
 from pathlib import Path
+import pickle
 
 import numpy as np
 from PIL import Image
@@ -134,8 +135,9 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
-    parser.add_argument("--world_size", default=10, type=int, help="default is for NEPS mode with DDP, so 10.")
+    parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
+    parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
     return parser
 
 
@@ -153,32 +155,32 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
     args.output_dir = working_directory
     ngpus_per_node = torch.cuda.device_count()
     print(f"Number of GPUs per node detected: {ngpus_per_node}")
-    # args.world_size = 1
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(find_free_port())
+    os.environ["MASTER_PORT"] = '29500'
+    # os.environ["MASTER_PORT"] = str(find_free_port())
     
     if args.is_neps_run:
         try:
-            mp.spawn(
-                    train_dino,
-                    nprocs=ngpus_per_node,
-                    args=(working_directory, previous_working_directory, args, hyperparameters)
-                    )
+            train_dino(torch.distributed.get_rank(), working_directory, previous_working_directory, args, hyperparameters)
         except:
             return 0
-    
-        # Return validation metric
-        with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
-            val_metric = f.read()
-        print(f"val_metric: {val_metric}")
-        return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
+
+        if torch.distributed.get_rank() == 0: # assumption: rank, running neps is 0
+            # Return validation metric
+            with open(str(args.output_dir) + "/current_val_metric.txt", "r") as f:
+                val_metric = f.read()
+            print(f"val_metric: {val_metric}")
+            return -float(val_metric)  # Remember: NEPS minimizes the loss!!!
+        return 0
     else:
         os.environ["WORLD_SIZE"] = str(args.world_size)
         train_dino(None, args.output_dir, args.output_dir, args)
         
 
 def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
-    utils.init_distributed_mode(args, rank) 
+    if not args.is_neps_run:
+        print(f"init distributed mode executed")
+        utils.init_distributed_mode(args, rank)
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
     
@@ -445,6 +447,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             finetuning_parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
             finetuning_parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
             finetuning_parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
+            finetuning_parser.add_argument("--world_size", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
+            finetuning_parser.add_argument("--gpu", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
+            finetuning_parser.add_argument('--config_file_path', help="actually not needed here -- just for avoiding unrecognized arguments error")
             finetuning_args = finetuning_parser.parse_args()
             
             finetuning_args.arch = args.arch
@@ -673,6 +678,7 @@ if __name__ == '__main__':
     
     # DINO run with NEPS
     if args.is_neps_run:
+        utils.init_distributed_mode(args, None)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
@@ -750,18 +756,44 @@ if __name__ == '__main__':
                     epoch_fidelity=neps.IntegerParameter(lower=1, upper=args.epochs, is_fidelity=True),
                 )
        
-        dino_neps_main = partial(dino_neps_main, args=args)
+        #dino_neps_main = partial(dino_neps_main, args=args)
+        def main():
+            with Path(args.config_file_path).open('rb') as f:
+                dct_to_load = pickle.load(f)
+            hypers = dct_to_load['hypers']
+            working_directory = dct_to_load['working_directory']
+            previous_working_directory = dct_to_load['working_directory']
+                
+            return dino_neps_main(working_directory=working_directory, previous_working_directory=previous_working_directory,
+                                  args=args, **hypers)
+
+
+        def main_master(working_directory, previous_working_directory, **hypers):
+            dct_to_dump = {"working_directory": working_directory, "previous_working_directory": previous_working_directory, "hypers": hypers}
+            with Path(args.config_file_path).open('wb') as f:
+                pickle.dump(dct_to_dump, f)
+            torch.distributed.barrier()
+            return main()
+            
         
-        neps.run(
-            run_pipeline=dino_neps_main,
-            pipeline_space=pipeline_space,
-            working_directory=args.output_dir,
-            max_evaluations_total=10000,
-            max_evaluations_per_run=1,
-            eta=4,
-            early_stopping_rate=1,
-        )
+        def main_worker():
+            torch.distributed.barrier()
+            main()
+            
+        
+        if torch.distributed.get_rank() == 0:
+            neps.run(
+                run_pipeline=main_master,
+                pipeline_space=pipeline_space,
+                working_directory=args.output_dir,
+                max_evaluations_total=10000,
+                max_evaluations_per_run=1,
+                eta=4,
+                early_stopping_rate=1,
+            )
+        else:
+            main_worker()
 
     # Default DINO run
     else:
-        dino_neps_main(args.output_dir, args.output_dir, args)
+        dino_neps_main(args.output_dir, previous_working_directory=None, args=args)

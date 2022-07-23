@@ -34,7 +34,7 @@ def eval_linear(args):
     if args.is_neps_run:
         pass  # utils.init_distributed_mode(args) done in pretraining
     else:
-        utils.init_distributed_mode(args)
+        utils.init_distributed_mode(args, None)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
@@ -106,6 +106,7 @@ def eval_linear(args):
     
     else:
         dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+        sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
     
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
@@ -154,11 +155,11 @@ def eval_linear(args):
     start_epoch = to_restore["epoch"]
     best_acc = to_restore["best_acc"]
     
-    if int(args.epoch_fidelity) == 6:
+    if hasattr(args, "epoch_fidelity") and int(args.epoch_fidelity) == 6:
         epoch_end_range = 25
-    elif (args.epoch_fidelity) == 25:
+    elif hasattr(args, "epoch_fidelity") and (args.epoch_fidelity) == 25:
         epoch_end_range = 50
-    elif (args.epoch_fidelity) == 100:
+    elif hasattr(args, "epoch_fidelity") and (args.epoch_fidelity) == 100:
         epoch_end_range = 100
     else:
         # is_neps_run == False
@@ -332,6 +333,10 @@ if __name__ == '__main__':
     parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
     parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
     parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
+    parser.add_argument("--world_size", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
+    parser.add_argument("--gpu", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
+    parser.add_argument('--config_file_path', help="actually not needed here -- just for avoiding unrecognized arguments error")
+    parser.add_argument('--seed', default=0, type=int, help='Random seed.')
     
     args = parser.parse_args()
     eval_linear(args)
