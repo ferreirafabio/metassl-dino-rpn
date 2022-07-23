@@ -1,9 +1,9 @@
 #!/bin/zsh
-#SBATCH -p mldlc_gpu-rtx2080 # alldlc_gpu-rtx2080
+#SBATCH -p alldlc_gpu-rtx2080
 #SBATCH --gres=gpu:8
 #SBATCH -J dino_neps_hpo
-#SBATCH -t 5-23:59:59  # 23:59:59
-#SBATCH --array 0-9999%10
+#SBATCH -t 23:59:59 #5-23:59:59  # 23:59:59
+#SBATCH --array 0-5%2
 
 source /home/ferreira/.profile
 source activate dino
