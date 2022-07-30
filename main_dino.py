@@ -39,6 +39,7 @@ import utils
 import vision_transformer as vits
 from vision_transformer import DINOHead
 from functools import partial
+from rpn import RPN
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -217,14 +218,15 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
     # ============ preparing data ... ============
-    transform = DataAugmentationDINO(
-        args.global_crops_scale,
-        args.local_crops_scale,
-        args.local_crops_number,
-        args.is_neps_run,
-        hyperparameters,
-    )
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    # transform = DataAugmentationDINO(
+    #     args.global_crops_scale,
+    #     args.local_crops_scale,
+    #     args.local_crops_number,
+    #     args.is_neps_run,
+    #     hyperparameters,
+    # )
+    # dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = datasets.ImageFolder(args.data_path)
     if args.is_neps_run:
         dataset_percentage_usage = 100
         valid_size = 0.2
@@ -380,6 +382,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     start_time = time.time()
     print("Starting DINO training !")
+
+    rpn = RPN()
     
     if args.is_neps_run:
         end_epoch = hyperparameters["epoch_fidelity"]
@@ -393,7 +397,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-                epoch, fp16_scaler, args)
+                epoch, fp16_scaler, rpn, args)
     
             # ============ writing logs ... ============
             save_dict = {
@@ -477,7 +481,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
-                    fp16_scaler, args):
+                    fp16_scaler, rpn, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
@@ -490,6 +494,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
+        images = rpn(images)
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
