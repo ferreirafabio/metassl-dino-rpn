@@ -225,8 +225,12 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #     args.is_neps_run,
     #     hyperparameters,
     # )
-    # dataset = datasets.ImageFolder(args.data_path, transform=transform)
-    dataset = datasets.ImageFolder(args.data_path)
+    transform = transforms.Compose([
+            transforms.ToTensor(),
+            # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+    
+    dataset = datasets.ImageFolder(args.data_path, transform=transform)
     if args.is_neps_run:
         dataset_percentage_usage = 100
         valid_size = 0.2
@@ -484,6 +488,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     fp16_scaler, rpn, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
+    
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
@@ -497,6 +502,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         images = rpn(images)
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
+            print(images.shape)
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)

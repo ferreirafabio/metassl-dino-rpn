@@ -33,7 +33,7 @@ import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 
 
-class GaussianBlur(object):
+class GaussianBlur(nn.Module):
     """
     Apply Gaussian Blur to the PIL image.
     """
@@ -54,7 +54,7 @@ class GaussianBlur(object):
         )
 
 
-class Solarization(object):
+class Solarization(nn.Module):
     """
     Apply Solarization to the PIL image.
     """
@@ -465,7 +465,7 @@ def setup_for_distributed(is_master):
 
 
 def init_distributed_mode(args, rank):
-    print(os.environ)
+    # print(os.environ)
     if args.is_neps_run:
         if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
             args.rank = int(os.environ["RANK"])

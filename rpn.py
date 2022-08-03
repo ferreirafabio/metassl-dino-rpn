@@ -19,6 +19,7 @@ from torchvision.transforms.functional import crop
 from torchvision import transforms
 import utils
 
+
 class ResNetRPN(nn.Module):
     def __init__(self, backbone='resnet50', backbone_path=None):
         super().__init__()
@@ -57,36 +58,66 @@ class RPN(nn.Module):
         self.local2_fc = nn.Linear(256, 2)
         self.loc = []
         
-        self.normalize = transforms.Compose(
+        self.normalize = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+    
+        # modules_g1, modules_g2, modules_l, self.trans_g1, self.trans_g2, self.trans_l = [], [], [], [], [], []
+        self.modules_g1 = transforms.Compose(
             [
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                utils.GaussianBlur(1.0),
+                self.normalize,
                 ]
             )
-    
-        modules_g1, modules_g2, modules_l, self.trans_g1, self.trans_g2, self.trans_l = [], [], [], [], [], []
-        modules_g1.append(transforms.RandomHorizontalFlip(p=0.5))
-        modules_g1.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
-        modules_g1.append(transforms.RandomGrayscale(p=0.2))
-        modules_g1.append(utils.GaussianBlur(1.0))
-        modules_g1.append(self.normalize)
-        self.trans_g1 = nn.Sequential(*modules_g1)
+        # modules_g1.append(transforms.RandomHorizontalFlip(p=0.5))
+        # modules_g1.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
+        # modules_g1.append(transforms.RandomGrayscale(p=0.2))
+        # modules_g1.append(utils.GaussianBlur(1.0))
+        # modules_l.append(torch.Tensor())
+        # modules_g1.append(transforms.Normalize(self.normalize_mean, self.normalize_std))
+        # self.trans_g1 = nn.Sequential(*modules_g1)
         
-        modules_g2.append(transforms.RandomHorizontalFlip(p=0.5))
-        modules_g2.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
-        modules_g2.append(transforms.RandomGrayscale(p=0.2))
-        modules_g2.append(utils.GaussianBlur(0.1))
-        modules_g2.append(utils.Solarization(0.2))
-        modules_g2.append(self.normalize)
-        self.trans_g2 = nn.Sequential(*modules_g2)
+        self.modules_g2 = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                utils.GaussianBlur(1.0),
+                utils.Solarization(0.2),
+                self.normalize,
+                ]
+            )
         
-        modules_l.append(transforms.RandomHorizontalFlip(p=0.5))
-        modules_l.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
-        modules_l.append(transforms.RandomGrayscale(p=0.2))
-        modules_l.append(utils.GaussianBlur(0.5))
-        modules_l.append(self.normalize)
-        self.trans_l = nn.Sequential(*modules_l)
-    
+        # modules_g2.append(transforms.RandomHorizontalFlip(p=0.5))
+        # modules_g2.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
+        # modules_g2.append(transforms.RandomGrayscale(p=0.2))
+        # modules_g2.append(utils.GaussianBlur(0.1))
+        # modules_g2.append(utils.Solarization(0.2))
+        # modules_g2.append(torch.Tensor())
+        # modules_g2.append(transforms.Normalize(self.normalize_mean, self.normalize_std))
+        # self.trans_g2 = nn.Sequential(*modules_g2)
+        
+        self.modules_l = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                utils.GaussianBlur(0.5),
+                self.normalize,
+                ]
+            )
+        
+        # modules_l.append(transforms.RandomHorizontalFlip(p=0.5))
+        # modules_l.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
+        # modules_l.append(transforms.RandomGrayscale(p=0.2))
+        # modules_l.append(utils.GaussianBlur(0.5))
+        # modules_l.append(torch.Tensor())
+        # modules_l.append(transforms.Normalize(self.normalize_mean, self.normalize_std))
+        # self.trans_l = nn.Sequential(*modules_l)
     
     def forward(self, imgs):
         emb = self.net(imgs)
@@ -94,6 +125,7 @@ class RPN(nn.Module):
         g_view2 = self.global2_fc(emb)
         l_view1 = self.local1_fc(emb)
         l_view2 = self.local1_fc(emb)
+        
         crops_transformed = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, imgs)
         return crops_transformed
         
@@ -111,19 +143,34 @@ class RPN(nn.Module):
         
         # using crop functionality with padding
         g_view1 = crop(imgs, top=g_view1_coords[:, 0], left=g_view1_coords[:, 1], height=244, width=224)
-        g_view1 = self.trans_g1(g_view1)
+        g_view1 = self.modules_g1(g_view1)
+        # g_view1 = self.trans_g1(g_view1)
+        # g_view1 = g_view1.to_tensor()
+        # g_view1 = self.normalize(g_view1)
+
         g_view2 = crop(imgs, top=g_view2_cords[:, 0], left=g_view2_cords[:, 1], height=244, width=224)
-        g_view2 = self.trans_g2(g_view2)
-        
+        g_view2 = self.modules_g2(g_view2)
+        # g_view2 = self.trans_g2(g_view2)
+        # g_view2 = g_view2.to_tensor()
+        # g_view2 = self.normalize(g_view2)
+
         l_view1 = crop(imgs, top=l_view1_coords[:, 0], left=l_view1_coords[:, 1], height=96, width=96)
-        l_view1 = self.trans_l(l_view1)
-        
+        l_view1 = self.modules_l(l_view1)
+
+        # l_view1 = self.trans_l(l_view1)
+        # l_view1 = l_view1.to_tensor()
+        # l_view1 = self.normalize(l_view1)
+
         l_view2 = crop(imgs, top=l_view2_coords[:, 0], left=l_view2_coords[:, 1], height=96, width=96)
-        l_view2 = self.trans_l(l_view2)
-        
+        l_view2 = self.modules_l(l_view2)
+
+        # l_view2 = self.trans_l(l_view2)
+        # l_view2 = l_view2.to_tensor()
+        # l_view2 = self.normalize(l_view2)
+
         return [g_view1, g_view2, l_view1, l_view2]
         
-
+        
 class SSD300(nn.Module):
     def __init__(self, backbone=ResNetRPN('resnet50')):
         super().__init__()
