@@ -504,7 +504,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         images = rpn(images)
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            print(images.shape)
+            # print(images.shape)
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
