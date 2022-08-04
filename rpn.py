@@ -52,10 +52,11 @@ class RPN(nn.Module):
         super().__init__()
 
         self.net = backbone
-        self.global1_fc = nn.Linear(256, 2)
-        self.global2_fc = nn.Linear(256, 2)
-        self.local1_fc = nn.Linear(256, 2)
-        self.local2_fc = nn.Linear(256, 2)
+        self.net = self.net.cuda()
+        self.global1_fc = nn.Linear(256, 2).cuda()
+        self.global2_fc = nn.Linear(256, 2).cuda()
+        self.local1_fc = nn.Linear(256, 2).cuda()
+        self.local2_fc = nn.Linear(256, 2).cuda()
         self.loc = []
         
         self.normalize = transforms.Compose([
