@@ -96,7 +96,7 @@ class RPN(nn.Module):
         
     def forward(self, imgs):
         print(imgs.shape)
-        emb = self.net(imgs)
+        emb = self.net(imgs[0])
         g_view1 = self.global1_fc(emb)
         g_view2 = self.global2_fc(emb)
         l_view1 = self.local1_fc(emb)
