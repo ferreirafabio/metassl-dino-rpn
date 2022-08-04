@@ -226,6 +226,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #     hyperparameters,
     # )
     transform = transforms.Compose([
+            transforms.RandomResizedCrop(512, scale=(0.4, 1.), interpolation=Image.BICUBIC),
             transforms.ToTensor(),
             # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
