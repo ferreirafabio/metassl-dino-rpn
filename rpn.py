@@ -63,7 +63,6 @@ class RPN(nn.Module):
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     
-        # modules_g1, modules_g2, modules_l, self.trans_g1, self.trans_g2, self.trans_l = [], [], [], [], [], []
         self.modules_g1 = transforms.Compose(
             [
                 transforms.RandomHorizontalFlip(p=0.5),
@@ -73,13 +72,6 @@ class RPN(nn.Module):
                 self.normalize,
                 ]
             )
-        # modules_g1.append(transforms.RandomHorizontalFlip(p=0.5))
-        # modules_g1.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
-        # modules_g1.append(transforms.RandomGrayscale(p=0.2))
-        # modules_g1.append(utils.GaussianBlur(1.0))
-        # modules_l.append(torch.Tensor())
-        # modules_g1.append(transforms.Normalize(self.normalize_mean, self.normalize_std))
-        # self.trans_g1 = nn.Sequential(*modules_g1)
         
         self.modules_g2 = transforms.Compose(
             [
@@ -92,15 +84,6 @@ class RPN(nn.Module):
                 ]
             )
         
-        # modules_g2.append(transforms.RandomHorizontalFlip(p=0.5))
-        # modules_g2.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
-        # modules_g2.append(transforms.RandomGrayscale(p=0.2))
-        # modules_g2.append(utils.GaussianBlur(0.1))
-        # modules_g2.append(utils.Solarization(0.2))
-        # modules_g2.append(torch.Tensor())
-        # modules_g2.append(transforms.Normalize(self.normalize_mean, self.normalize_std))
-        # self.trans_g2 = nn.Sequential(*modules_g2)
-        
         self.modules_l = transforms.Compose(
             [
                 transforms.RandomHorizontalFlip(p=0.5),
@@ -111,15 +94,8 @@ class RPN(nn.Module):
                 ]
             )
         
-        # modules_l.append(transforms.RandomHorizontalFlip(p=0.5))
-        # modules_l.append(transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8))
-        # modules_l.append(transforms.RandomGrayscale(p=0.2))
-        # modules_l.append(utils.GaussianBlur(0.5))
-        # modules_l.append(torch.Tensor())
-        # modules_l.append(transforms.Normalize(self.normalize_mean, self.normalize_std))
-        # self.trans_l = nn.Sequential(*modules_l)
-    
     def forward(self, imgs):
+        print(imgs.shape)
         emb = self.net(imgs)
         g_view1 = self.global1_fc(emb)
         g_view2 = self.global2_fc(emb)
