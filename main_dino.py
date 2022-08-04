@@ -389,8 +389,11 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     print("Starting DINO training !")
 
     rpn = RPN()
+    print("before")
     rpn = rpn.cuda()
-    
+    print("after")
+
+
     if args.is_neps_run:
         end_epoch = hyperparameters["epoch_fidelity"]
     else:
