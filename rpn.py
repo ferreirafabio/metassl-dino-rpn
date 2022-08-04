@@ -52,11 +52,10 @@ class RPN(nn.Module):
         super().__init__()
 
         self.net = backbone
-        self.net = self.net.cuda()
-        self.global1_fc = nn.Linear(256, 2).cuda()
-        self.global2_fc = nn.Linear(256, 2).cuda()
-        self.local1_fc = nn.Linear(256, 2).cuda()
-        self.local2_fc = nn.Linear(256, 2).cuda()
+        self.global1_fc = nn.Linear(256, 2)
+        self.global2_fc = nn.Linear(256, 2)
+        self.local1_fc = nn.Linear(256, 2)
+        self.local2_fc = nn.Linear(256, 2)
         self.loc = []
         
         self.normalize = transforms.Compose([
@@ -97,6 +96,7 @@ class RPN(nn.Module):
         
     def forward(self, imgs):
         emb = self.net(imgs[0])
+        print(emb)
         g_view1 = self.global1_fc(emb)
         g_view2 = self.global2_fc(emb)
         l_view1 = self.local1_fc(emb)
