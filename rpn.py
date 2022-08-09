@@ -121,8 +121,10 @@ class RPN(nn.Module):
         
         print("-------------------------")
         print(g_view1_tensors.size())
-        # crops_transformed = torch.as_tensor(crops_transformed)
-        # print(crops_transformed.size())
+        print(g_view2_tensors.size())
+        print(l_view1_tensors.size())
+        print(l_view2_tensors.size())
+
         return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
         
     def _init_weights(self):
