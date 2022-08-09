@@ -94,7 +94,7 @@ class RPN(nn.Module):
                 ]
             )
         
-    def forward(self, imgs):
+    def forward(self, imgs, halfprecision=False):
         g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
         
         # since we have list of images with varying resolution, we need to transform them individually
@@ -123,7 +123,13 @@ class RPN(nn.Module):
         print(g_view2_tensors.size())
         print(l_view1_tensors.size())
         print(l_view2_tensors.size())
-
+        
+        if halfprecision:
+            g_view1_tensors.half()
+            g_view2_tensors.half()
+            l_view1_tensors.half()
+            l_view2_tensors.half()
+            
         return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
 
     def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, img):
