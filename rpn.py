@@ -42,6 +42,7 @@ class ResNetRPN(nn.Module):
 
     def forward(self, x):
         x = self.backbone(x)
+        print("dtype", x.dtype)
         return x
 
 
