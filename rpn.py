@@ -114,10 +114,10 @@ class RPN(nn.Module):
             l_view1_tensors.append(l_view1)
             l_view2_tensors.append(l_view2)
     
-        g_view1_tensors = torch.stack(g_view1_tensors, 0)
-        g_view2_tensors = torch.stack(g_view2_tensors, 0)
-        l_view1_tensors = torch.stack(l_view1_tensors, 0)
-        l_view2_tensors = torch.stack(l_view2_tensors, 0)
+        g_view1_tensors = torch.stack(g_view1_tensors, 0).cuda().half()
+        g_view2_tensors = torch.stack(g_view2_tensors, 0).cuda().half()
+        l_view1_tensors = torch.stack(l_view1_tensors, 0).cuda().half()
+        l_view2_tensors = torch.stack(l_view2_tensors, 0).cuda().half()
         
         print("-------------------------")
         print(g_view1_tensors.size())

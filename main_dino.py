@@ -290,6 +290,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknow architecture: {args.arch}")
 
+    rpn = RPN(backbone=ResNetRPN('resnet18'))
+    
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
         embed_dim,
@@ -302,8 +304,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
     )
     # move networks to gpu
-    student, teacher = student.cuda(), teacher.cuda()
-    rpn = RPN(backbone=ResNetRPN('resnet18').cuda()).cuda()
+    student, teacher, rpn = student.cuda(), teacher.cuda(), rpn.cuda()
     
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
@@ -507,7 +508,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            print(images[0].is_cuda)
             images = rpn(images)
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
