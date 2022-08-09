@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="b6e471f0-ab09-4671-9366-fe7426be5b27" name="META_metassl_dino_rpn">
+        <fileTransfer accessType="SFTP" host="10.5.166.176" port="22" sshConfigId="4411ba9a-ce37-48a9-bd29-8bc3141c6e69" sshConfig="META_SSH" authAgent="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

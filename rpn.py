@@ -133,6 +133,7 @@ class RPN(nn.Module):
         print(img.size())
         g_view1 = crop(img, top=g_view1_coords[:, 0].int(), left=g_view1_coords[:, 1].int(), height=244, width=224)
         print(g_view1.size())
+        g_view1 = torch.squeeze(g_view1, 0)
         g_view1 = self.modules_g1(g_view1)
         # g_view1 = self.trans_g1(g_view1)
         # g_view1 = g_view1.to_tensor()
