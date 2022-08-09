@@ -37,7 +37,7 @@ class ResNetRPN(nn.Module):
             backbone.load_state_dict(torch.load(backbone_path))
 
         backbone.fc = nn.Linear(512, 256)
-        torch.nn.init.xavier_uniform(backbone.fc.weight)
+        torch.nn.init.xavier_uniform_(backbone.fc.weight)
         self.backbone = backbone
 
     def forward(self, x):
@@ -125,12 +125,6 @@ class RPN(nn.Module):
         print(l_view2_tensors.size())
 
         return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
-        
-    def _init_weights(self):
-        layers = [*self.additional_blocks, *self.loc, *self.conf]
-        for layer in layers:
-            for param in layer.parameters():
-                if param.dim() > 1: nn.init.xavier_uniform_(param)
 
     def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, img):
         
