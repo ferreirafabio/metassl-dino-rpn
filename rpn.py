@@ -109,12 +109,10 @@ class RPN(nn.Module):
             l_view2 = self.local1_fc(emb)
             img = torch.squeeze(img, 0)
             print("executing get_cropped_imgs")
-            crop = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            crops_transformed.append(crop)
-        print(crops_transformed)
-        torch.as_tensor(crops_transformed)
+            crops = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
+            crops_transformed.append(crops)
+        crops_transformed = torch.as_tensor(crops_transformed)
         print(crops_transformed.size())
-        print("returning crops")
         return crops_transformed
         
     def _init_weights(self):
@@ -124,45 +122,19 @@ class RPN(nn.Module):
                 if param.dim() > 1: nn.init.xavier_uniform_(param)
 
     def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, img):
-
-        # get img dimensions
-        # imgs_sizes = imgs.size()
-        # normalize locs:
         
         # using crop functionality with padding
-        print(img.size())
         g_view1 = crop(img, top=g_view1_coords[:, 0].int(), left=g_view1_coords[:, 1].int(), height=244, width=224)
-        print(g_view1.size())
         g_view1 = self.modules_g1(g_view1)
-        # g_view1 = self.trans_g1(g_view1)
-        # g_view1 = g_view1.to_tensor()
-        # g_view1 = self.normalize(g_view1)
-
-        print(img.size())
+    
         g_view2 = crop(img, top=g_view2_cords[:, 0].int(), left=g_view2_cords[:, 1].int(), height=244, width=224)
-        print(g_view2.size())
         g_view2 = self.modules_g2(g_view2)
-        # g_view2 = self.trans_g2(g_view2)
-        # g_view2 = g_view2.to_tensor()
-        # g_view2 = self.normalize(g_view2)
-
-        print(img.size())
+        
         l_view1 = crop(img, top=l_view1_coords[:, 0].int(), left=l_view1_coords[:, 1].int(), height=96, width=96)
-        print(l_view1.size())
         l_view1 = self.modules_l(l_view1)
 
-        # l_view1 = self.trans_l(l_view1)
-        # l_view1 = l_view1.to_tensor()
-        # l_view1 = self.normalize(l_view1)
-
-        print(img.size())
         l_view2 = crop(img, top=l_view2_coords[:, 0].int(), left=l_view2_coords[:, 1].int(), height=96, width=96)
-        print(l_view2.size())
         l_view2 = self.modules_l(l_view2)
-
-        # l_view2 = self.trans_l(l_view2)
-        # l_view2 = l_view2.to_tensor()
-        # l_view2 = self.normalize(l_view2)
 
         return [g_view1, g_view2, l_view1, l_view2]
         
