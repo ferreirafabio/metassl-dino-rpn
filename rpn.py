@@ -118,11 +118,11 @@ class RPN(nn.Module):
         l_view1_tensors = torch.stack(l_view1_tensors, 0).cuda()
         l_view2_tensors = torch.stack(l_view2_tensors, 0).cuda()
         
-        print("-------------------------")
-        print(g_view1_tensors.size())
-        print(g_view2_tensors.size())
-        print(l_view1_tensors.size())
-        print(l_view2_tensors.size())
+        # print("-------------------------")
+        # print(g_view1_tensors.size())
+        # print(g_view2_tensors.size())
+        # print(l_view1_tensors.size())
+        # print(l_view2_tensors.size())
 
         return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
 
