@@ -107,6 +107,7 @@ class RPN(nn.Module):
             g_view2 = self.global2_fc(emb)
             l_view1 = self.local1_fc(emb)
             l_view2 = self.local1_fc(emb)
+            print(emb.size())
             print("executing get_cropped_imgs")
             crop = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
             crops_transformed.append(crop)
