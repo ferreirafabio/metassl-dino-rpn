@@ -98,20 +98,20 @@ class RPN(nn.Module):
         
     def forward(self, imgs):
         print("forward pass")
-        crops_transformed = []
+        # crops_transformed = []
         
         print("feeding emb to backbone")
-        for img in imgs:
-            img = torch.unsqueeze(img, 0)
-            emb = self.backbone(img)
-            print(emb)
-            g_view1 = self.global1_fc(emb)
-            g_view2 = self.global2_fc(emb)
-            l_view1 = self.local1_fc(emb)
-            l_view2 = self.local1_fc(emb)
-            print("executing get_cropped_imgs")
-            crop = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            crops_transformed.append(crop)
+        # for img in imgs:
+        #     img = torch.unsqueeze(img, 0)
+        emb = self.backbone(imgs)
+        print(emb.size())
+        g_view1 = self.global1_fc(emb)
+        g_view2 = self.global2_fc(emb)
+        l_view1 = self.local1_fc(emb)
+        l_view2 = self.local1_fc(emb)
+        print("executing get_cropped_imgs")
+        crops_transformed = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
+        # crops_transformed.append(crop)
         return crops_transformed
         
     def _init_weights(self):
