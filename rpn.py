@@ -64,6 +64,7 @@ class RPN(nn.Module):
     
         self.modules_g1 = transforms.Compose(
             [
+                transforms.ToPILImage(),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
@@ -74,6 +75,7 @@ class RPN(nn.Module):
         
         self.modules_g2 = transforms.Compose(
             [
+                transforms.ToPILImage(),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
@@ -85,6 +87,7 @@ class RPN(nn.Module):
         
         self.modules_l = transforms.Compose(
             [
+                transforms.ToPILImage(),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
