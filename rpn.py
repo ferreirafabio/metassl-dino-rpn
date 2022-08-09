@@ -42,7 +42,6 @@ class ResNetRPN(nn.Module):
 
     def forward(self, x):
         x = self.backbone(x)
-        print("after", x)
         return x
 
 
@@ -111,6 +110,7 @@ class RPN(nn.Module):
             print("executing get_cropped_imgs")
             crops = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
             crops_transformed.append(crops)
+        print("-------------------------")
         crops_transformed = torch.as_tensor(crops_transformed)
         print(crops_transformed.size())
         return crops_transformed
