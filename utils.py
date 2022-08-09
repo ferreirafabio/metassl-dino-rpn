@@ -853,3 +853,11 @@ def multi_scale(samples, model):
     v /= 3
     v /= v.norm()
     return v
+
+
+# a simple custom collate function, just to show the idea
+def custom_collate(batch):
+    data = [item[0] for item in batch]
+    target = [item[1] for item in batch]
+    target = torch.LongTensor(target)
+    return [data, target]

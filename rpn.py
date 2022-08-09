@@ -37,26 +37,26 @@ class ResNetRPN(nn.Module):
             backbone.load_state_dict(torch.load(backbone_path))
 
         # self.feature_extractor = nn.Sequential(*list(backbone.children())[:7])
-        # 4 parameters for each view (x,y,w,h)
         backbone.fc = nn.Linear(512, 256)
         torch.nn.init.xavier_uniform(backbone.fc.weight)
-        self.feature_extractor = backbone
+        self.backbone = backbone
 
     def forward(self, x):
-        x = self.feature_extractor(x)
+        x = self.backbone(x)
+        print("after", x)
         return x
 
 
 class RPN(nn.Module):
     def __init__(self, backbone=ResNetRPN('resnet18')):
         super().__init__()
-
-        self.net = backbone
+        print("Initializing RPN")
+        self.backbone = backbone
+        print(self.backbone)
         self.global1_fc = nn.Linear(256, 2)
         self.global2_fc = nn.Linear(256, 2)
         self.local1_fc = nn.Linear(256, 2)
         self.local2_fc = nn.Linear(256, 2)
-        self.loc = []
         
         self.normalize = transforms.Compose([
             transforms.ToTensor(),
@@ -95,13 +95,21 @@ class RPN(nn.Module):
             )
         
     def forward(self, imgs):
-        emb = self.net(imgs[0])
-        g_view1 = self.global1_fc(emb)
-        g_view2 = self.global2_fc(emb)
-        l_view1 = self.local1_fc(emb)
-        l_view2 = self.local1_fc(emb)
+        print("forward pass")
+        crops_transformed = []
         
-        crops_transformed = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, imgs)
+        for img in imgs:
+            print(img)
+            print("feeding emb to backbone")
+            emb = self.backbone(img)
+            print(emb)
+            g_view1 = self.global1_fc(emb)
+            g_view2 = self.global2_fc(emb)
+            l_view1 = self.local1_fc(emb)
+            l_view2 = self.local1_fc(emb)
+            print("executing get_cropped_imgs")
+            crop = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
+            crops_transformed.append(crop)
         return crops_transformed
         
     def _init_weights(self):
@@ -110,33 +118,33 @@ class RPN(nn.Module):
             for param in layer.parameters():
                 if param.dim() > 1: nn.init.xavier_uniform_(param)
 
-    def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, imgs):
+    def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, img):
 
         # get img dimensions
         # imgs_sizes = imgs.size()
         # normalize locs:
         
         # using crop functionality with padding
-        g_view1 = crop(imgs, top=g_view1_coords[:, 0], left=g_view1_coords[:, 1], height=244, width=224)
+        g_view1 = crop(img, top=g_view1_coords[:, 0], left=g_view1_coords[:, 1], height=244, width=224)
         g_view1 = self.modules_g1(g_view1)
         # g_view1 = self.trans_g1(g_view1)
         # g_view1 = g_view1.to_tensor()
         # g_view1 = self.normalize(g_view1)
 
-        g_view2 = crop(imgs, top=g_view2_cords[:, 0], left=g_view2_cords[:, 1], height=244, width=224)
+        g_view2 = crop(img, top=g_view2_cords[:, 0], left=g_view2_cords[:, 1], height=244, width=224)
         g_view2 = self.modules_g2(g_view2)
         # g_view2 = self.trans_g2(g_view2)
         # g_view2 = g_view2.to_tensor()
         # g_view2 = self.normalize(g_view2)
 
-        l_view1 = crop(imgs, top=l_view1_coords[:, 0], left=l_view1_coords[:, 1], height=96, width=96)
+        l_view1 = crop(img, top=l_view1_coords[:, 0], left=l_view1_coords[:, 1], height=96, width=96)
         l_view1 = self.modules_l(l_view1)
 
         # l_view1 = self.trans_l(l_view1)
         # l_view1 = l_view1.to_tensor()
         # l_view1 = self.normalize(l_view1)
 
-        l_view2 = crop(imgs, top=l_view2_coords[:, 0], left=l_view2_coords[:, 1], height=96, width=96)
+        l_view2 = crop(img, top=l_view2_coords[:, 0], left=l_view2_coords[:, 1], height=96, width=96)
         l_view2 = self.modules_l(l_view2)
 
         # l_view2 = self.trans_l(l_view2)

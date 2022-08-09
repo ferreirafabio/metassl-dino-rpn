@@ -36,10 +36,12 @@ from torchvision import models as torchvision_models
 from eval_linear import eval_linear
 
 import utils
+from utils import custom_collate
 import vision_transformer as vits
 from vision_transformer import DINOHead
 from functools import partial
 from rpn import RPN
+from rpn import ResNetRPN
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -226,7 +228,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #     hyperparameters,
     # )
     transform = transforms.Compose([
-            transforms.RandomResizedCrop(512, scale=(0.4, 1.), interpolation=Image.BICUBIC),
+            # transforms.RandomResizedCrop(512, scale=(0.4, 1.), interpolation=Image.BICUBIC),
             transforms.ToTensor(),
             # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
@@ -250,6 +252,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     
+    # todo: overwrite collate of dataloader to return list (instead of tensors) of differently (instead of equally) shaped images
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=train_sampler if args.is_neps_run else sampler,
@@ -257,6 +260,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
+        collate_fn=custom_collate,
     )
     
     if args.is_neps_run:
@@ -388,11 +392,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     start_time = time.time()
     print("Starting DINO training !")
 
-    rpn = RPN()
-    print("before")
-    rpn = rpn.cuda()
-    print("after")
-
+    rpn = RPN(ResNetRPN('resnet18').cuda()).cuda()
 
     if args.is_neps_run:
         end_epoch = hyperparameters["epoch_fidelity"]
@@ -402,7 +402,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     try:
         for epoch in range(start_epoch, end_epoch):
             data_loader.sampler.set_epoch(epoch)
-    
+            print(epoch, start_epoch, end_epoch)
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
@@ -495,6 +495,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
+        print(it)
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
         for i, param_group in enumerate(optimizer.param_groups):
@@ -504,10 +505,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
+        print("rpn forward pass")
+        print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         images = rpn(images)
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            # print(images.shape)
+            print(f"image shape after fw pass: {images.shape}")
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
