@@ -228,9 +228,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #     hyperparameters,
     # )
     transform = transforms.Compose([
-            # transforms.RandomResizedCrop(512, scale=(0.4, 1.), interpolation=Image.BICUBIC),
             transforms.ToTensor(),
-            # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
@@ -503,13 +501,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
         print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
-    
-        images = rpn(images)
-
-        torch.distributed.barrier()
         
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
+            images = rpn(images)
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)

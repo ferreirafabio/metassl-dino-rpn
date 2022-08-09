@@ -50,7 +50,6 @@ class RPN(nn.Module):
         super().__init__()
         print("Initializing RPN")
         self.backbone = backbone
-        print(self.backbone)
         self.global1_fc = nn.Linear(256, 2)
         self.global2_fc = nn.Linear(256, 2)
         self.local1_fc = nn.Linear(256, 2)
