@@ -389,7 +389,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     start_time = time.time()
     print("Starting DINO training !")
 
-    rpn = RPN(ResNetRPN('resnet18').cuda()).cuda()
+    with torch.cuda.amp.autocast(fp16_scaler is not None):
+        rpn = RPN(ResNetRPN('resnet18').cuda()).cuda()
 
     if args.is_neps_run:
         end_epoch = hyperparameters["epoch_fidelity"]
