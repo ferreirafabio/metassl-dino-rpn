@@ -303,18 +303,23 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     )
     # move networks to gpu
     student, teacher = student.cuda(), teacher.cuda()
+    rpn = RPN(backbone=ResNetRPN('resnet18').cuda()).cuda()
+    
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
         student = nn.SyncBatchNorm.convert_sync_batchnorm(student)
         teacher = nn.SyncBatchNorm.convert_sync_batchnorm(teacher)
+        rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
 
         # we need DDP wrapper to have synchro batch norms working...
         teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu])
         teacher_without_ddp = teacher.module
+        
     else:
         # teacher_without_ddp and teacher are the same thing
         teacher_without_ddp = teacher
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
+    rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu])
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
@@ -388,9 +393,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     start_time = time.time()
     print("Starting DINO training !")
-
-    with torch.cuda.amp.autocast(fp16_scaler is not None):
-        rpn = RPN(backbone=ResNetRPN('resnet18').cuda()).cuda()
 
     if args.is_neps_run:
         end_epoch = hyperparameters["epoch_fidelity"]
