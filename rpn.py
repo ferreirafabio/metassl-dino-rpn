@@ -36,7 +36,6 @@ class ResNetRPN(nn.Module):
         if backbone_path:
             backbone.load_state_dict(torch.load(backbone_path))
 
-        # self.feature_extractor = nn.Sequential(*list(backbone.children())[:7])
         backbone.fc = nn.Linear(512, 256)
         torch.nn.init.xavier_uniform(backbone.fc.weight)
         self.backbone = backbone
@@ -98,9 +97,9 @@ class RPN(nn.Module):
         print("forward pass")
         crops_transformed = []
         
+        print("feeding emb to backbone")
         for img in imgs:
-            print(img)
-            print("feeding emb to backbone")
+            img = torch.unsqueeze(img, 0)
             emb = self.backbone(img)
             print(emb)
             g_view1 = self.global1_fc(emb)
@@ -125,26 +124,26 @@ class RPN(nn.Module):
         # normalize locs:
         
         # using crop functionality with padding
-        g_view1 = crop(img, top=g_view1_coords[:, 0], left=g_view1_coords[:, 1], height=244, width=224)
+        g_view1 = crop(img, top=g_view1_coords[:, 0].int(), left=g_view1_coords[:, 1].int(), height=244, width=224)
         g_view1 = self.modules_g1(g_view1)
         # g_view1 = self.trans_g1(g_view1)
         # g_view1 = g_view1.to_tensor()
         # g_view1 = self.normalize(g_view1)
 
-        g_view2 = crop(img, top=g_view2_cords[:, 0], left=g_view2_cords[:, 1], height=244, width=224)
+        g_view2 = crop(img, top=g_view2_cords[:, 0].int(), left=g_view2_cords[:, 1].int(), height=244, width=224)
         g_view2 = self.modules_g2(g_view2)
         # g_view2 = self.trans_g2(g_view2)
         # g_view2 = g_view2.to_tensor()
         # g_view2 = self.normalize(g_view2)
 
-        l_view1 = crop(img, top=l_view1_coords[:, 0], left=l_view1_coords[:, 1], height=96, width=96)
+        l_view1 = crop(img, top=l_view1_coords[:, 0].int(), left=l_view1_coords[:, 1].int(), height=96, width=96)
         l_view1 = self.modules_l(l_view1)
 
         # l_view1 = self.trans_l(l_view1)
         # l_view1 = l_view1.to_tensor()
         # l_view1 = self.normalize(l_view1)
 
-        l_view2 = crop(img, top=l_view2_coords[:, 0], left=l_view2_coords[:, 1], height=96, width=96)
+        l_view2 = crop(img, top=l_view2_coords[:, 0].int(), left=l_view2_coords[:, 1].int(), height=96, width=96)
         l_view2 = self.modules_l(l_view2)
 
         # l_view2 = self.trans_l(l_view2)
