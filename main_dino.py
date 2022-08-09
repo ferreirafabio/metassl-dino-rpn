@@ -252,7 +252,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     
-    # todo: overwrite collate of dataloader to return list (instead of tensors) of differently (instead of equally) shaped images
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=train_sampler if args.is_neps_run else sampler,
@@ -402,7 +401,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     try:
         for epoch in range(start_epoch, end_epoch):
             data_loader.sampler.set_epoch(epoch)
-            print(epoch, start_epoch, end_epoch)
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
@@ -495,7 +493,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
-        print(it)
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
         for i, param_group in enumerate(optimizer.param_groups):

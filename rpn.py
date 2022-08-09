@@ -96,7 +96,7 @@ class RPN(nn.Module):
             )
         
     def forward(self, imgs):
-        crops_transformed = []
+        g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
         
         # since we have list of images with varying resolution, we need to transform them individually
         for img in imgs:
@@ -106,14 +106,24 @@ class RPN(nn.Module):
             g_view2 = self.global2_fc(emb)
             l_view1 = self.local1_fc(emb)
             l_view2 = self.local1_fc(emb)
+            
             img = torch.squeeze(img, 0)
-            print("executing get_cropped_imgs")
-            crops = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            crops_transformed.append(crops)
+            g_view1, g_view2, l_view1, l_view2 = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
+            g_view1_tensors.append(g_view1)
+            g_view2_tensors.append(g_view2)
+            l_view1_tensors.append(l_view1)
+            l_view2_tensors.append(l_view2)
+    
+        g_view1_tensors = torch.stack(g_view1_tensors, 0)
+        g_view2_tensors = torch.stack(g_view2_tensors, 0)
+        l_view1_tensors = torch.stack(l_view1_tensors, 0)
+        l_view2_tensors = torch.stack(l_view2_tensors, 0)
+        
         print("-------------------------")
-        crops_transformed = torch.as_tensor(crops_transformed)
-        print(crops_transformed.size())
-        return crops_transformed
+        print(g_view1_tensors.size())
+        # crops_transformed = torch.as_tensor(crops_transformed)
+        # print(crops_transformed.size())
+        return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
         
     def _init_weights(self):
         layers = [*self.additional_blocks, *self.loc, *self.conf]
@@ -136,7 +146,7 @@ class RPN(nn.Module):
         l_view2 = crop(img, top=l_view2_coords[:, 0].int(), left=l_view2_coords[:, 1].int(), height=96, width=96)
         l_view2 = self.modules_l(l_view2)
 
-        return [g_view1, g_view2, l_view1, l_view2]
+        return g_view1, g_view2, l_view1, l_view2
         
         
 class SSD300(nn.Module):
