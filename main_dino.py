@@ -341,13 +341,14 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
     if args.optimizer == "adamw":
-        optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
+        # optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
+        optimizer = torch.optim.AdamW(params_groups + rpn.parameters())  # to use with ViTs
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
         
-    rpn_optimizer = torch.optim.AdamW(rpn.parameters())
+    # rpn_optimizer = torch.optim.AdamW(rpn.parameters())
     
     # for mixed precision training
     fp16_scaler = None
@@ -409,7 +410,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-                epoch, fp16_scaler, rpn, rpn_optimizer, args)
+                epoch, fp16_scaler, rpn, args)
     
             # ============ writing logs ... ============
             save_dict = {
@@ -521,7 +522,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
 
-        rpn_optimizer.zero_grad()
+        # rpn_optimizer.zero_grad()
     
         # student update
         optimizer.zero_grad()
@@ -546,7 +547,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     
             # rpn_loss = -dino_loss(student_output, teacher_output, epoch)
             # rpn_loss.backward()
-            rpn_optimizer.step()
+            # rpn_optimizer.step()
         else:
             # rpn.requires_grad_(False)
             # student.requires_grad_(True)
@@ -570,7 +571,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # rpn_loss = -dino_loss(student_output, teacher_output, epoch)
     
             # fp16_scaler.scale(rpn_loss).backward()
-            fp16_scaler.step(rpn_optimizer)
+            # fp16_scaler.step(rpn_optimizer)
             
 
         # EMA update for the teacher
