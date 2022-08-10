@@ -560,7 +560,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            print(rpn.module.backbone.fc.weight.grad)
+            # print(rpn.module.backbone.fc.weight.grad)
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
             
