@@ -112,14 +112,15 @@ class RPN(nn.Module):
             g_views2_cropped_batch.append(g_view2_cropped)
             l_views1_cropped_batch.append(l_view1_cropped)
             l_views2_cropped_batch.append(l_view2_cropped)
-            
+
+        print("test")
         # since images now have same resolution, we can transform them batch-wise
         g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
         g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
         l_view1_tensors = torch.stack(l_views1_cropped_batch, 0).cuda()
         l_view2_tensors = torch.stack(l_views2_cropped_batch, 0).cuda()
-
         print(l_view2_tensors.size())
+
         g_view1_transf = self.modules_g1(g_view1_tensors)
         g_view2_transf = self.modules_g2(g_view2_tensors)
         l_view1_transf = self.modules_l(l_view1_tensors)
