@@ -56,7 +56,7 @@ class RPN(nn.Module):
         self.local2_fc = nn.Linear(256, 2)
         
         self.normalize = transforms.Compose([
-            transforms.ToTensor(),
+            # transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     
@@ -81,7 +81,7 @@ class RPN(nn.Module):
                 # utils.GaussianBlur(1.0),
                 transforms.GaussianBlur(kernel_size=5),
                 # utils.Solarization(0.2),
-                # transforms.RandomSolarize(threshold=128, p=0.2),
+                transforms.RandomSolarize(threshold=128, p=0.2),
                 self.normalize,
                 ]
             )
