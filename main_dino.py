@@ -348,6 +348,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     
     params_groups.append({'params': rpn_params})
     
+    for p in params_groups:
+        for k,v in p:
+            print(k, v)
+    
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
     elif args.optimizer == "sgd":
