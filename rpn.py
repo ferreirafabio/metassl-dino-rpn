@@ -95,28 +95,59 @@ class RPN(nn.Module):
             )
         
     def forward(self, imgs):
-        g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
+        # g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
+        views = []
+        g_views1_cropped_batch, g_views2_cropped_batch, l_views1_cropped_batch, l_views2_croped_batch = [], [], [], []
         
+        embs = self.backbone(imgs)
+        g_views1 = self.global1_fc(embs)
+        g_views2 = self.global2_fc(embs)
+        l_views1 = self.local1_fc(embs)
+        l_views2 = self.local1_fc(embs)
+
         # since we have list of images with varying resolution, we need to transform them individually
-        for img in imgs:
-            img = torch.unsqueeze(img, 0)
-            emb = self.backbone(img)
-            g_view1 = self.global1_fc(emb)
-            g_view2 = self.global2_fc(emb)
-            l_view1 = self.local1_fc(emb)
-            l_view2 = self.local1_fc(emb)
-            
+        # additionally, transforms.Compose still does not support processing batches :(
+        for img, g_view1, g_view2, l_view1, l_view2 in zip(imgs, g_views1, g_views2, l_views1, l_views2):
             img = torch.squeeze(img, 0)
-            g_view1, g_view2, l_view1, l_view2 = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            g_view1_tensors.append(g_view1)
-            g_view2_tensors.append(g_view2)
-            l_view1_tensors.append(l_view1)
-            l_view2_tensors.append(l_view2)
+            g_view1_cropped, g_view2_cropped, l_view1_cropped, l_view2_cropped = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
+            g_views1_cropped_batch.append(g_view1_cropped)
+            g_views2_cropped_batch.append(g_view2_cropped)
+            l_views1_cropped_batch.append(l_view1_cropped)
+            l_views2_croped_batch.append(l_view2_cropped)
+
+        g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
+        g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
+        l_view1_tensors = torch.stack(l_views1_cropped_batch, 0).cuda()
+        l_view2_tensors = torch.stack(l_views2_croped_batch, 0).cuda()
+
+        g_view1_transf = self.modules_g1(g_view1_tensors)
+        g_view2_transf = self.modules_g2(g_view2_tensors)
+        l_view1_transf = self.modules_l(l_view1_tensors)
+        l_view2_transf = self.modules_l(l_view2_tensors)
+        
+        
+        return [g_view1_transf, g_view2_transf, l_view1_transf, l_view2_transf]
+        
+        # for img in imgs:
+        #     img = torch.unsqueeze(img, 0)
+        #     emb = self.backbone(img)
+        #     g_view1 = self.global1_fc(emb)
+        #     g_view2 = self.global2_fc(emb)
+        #     l_view1 = self.local1_fc(emb)
+        #     l_view2 = self.local1_fc(emb)
+            
+            # img = torch.squeeze(img, 0)
+            # g_view1, g_view2, l_view1, l_view2 = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
+            # views.append(self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img))
+            # g_view1_tensors.append(g_view1)
+            # g_view2_tensors.append(g_view2)
+            # l_view1_tensors.append(l_view1)
+            # l_view2_tensors.append(l_view2)
     
-        g_view1_tensors = torch.stack(g_view1_tensors, 0).cuda()
-        g_view2_tensors = torch.stack(g_view2_tensors, 0).cuda()
-        l_view1_tensors = torch.stack(l_view1_tensors, 0).cuda()
-        l_view2_tensors = torch.stack(l_view2_tensors, 0).cuda()
+        # g_view1_tensors = torch.stack(g_view1_tensors, 0).cuda()
+        # g_view2_tensors = torch.stack(g_view2_tensors, 0).cuda()
+        # l_view1_tensors = torch.stack(l_view1_tensors, 0).cuda()
+        # l_view2_tensors = torch.stack(l_view2_tensors, 0).cuda()
         
         # print("-------------------------")
         # print(g_view1_tensors.size())
@@ -124,22 +155,22 @@ class RPN(nn.Module):
         # print(l_view1_tensors.size())
         # print(l_view2_tensors.size())
 
-        return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
+        # return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
 
     def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, img):
         
         # using crop functionality with padding
         g_view1 = crop(img, top=g_view1_coords[:, 0].int(), left=g_view1_coords[:, 1].int(), height=244, width=224)
-        g_view1 = self.modules_g1(g_view1)
+        # g_view1 = self.modules_g1(g_view1)
     
         g_view2 = crop(img, top=g_view2_cords[:, 0].int(), left=g_view2_cords[:, 1].int(), height=244, width=224)
-        g_view2 = self.modules_g2(g_view2)
+        # g_view2 = self.modules_g2(g_view2)
         
         l_view1 = crop(img, top=l_view1_coords[:, 0].int(), left=l_view1_coords[:, 1].int(), height=96, width=96)
-        l_view1 = self.modules_l(l_view1)
+        # l_view1 = self.modules_l(l_view1)
 
         l_view2 = crop(img, top=l_view2_coords[:, 0].int(), left=l_view2_coords[:, 1].int(), height=96, width=96)
-        l_view2 = self.modules_l(l_view2)
+        # l_view2 = self.modules_l(l_view2)
 
         return g_view1, g_view2, l_view1, l_view2
         
