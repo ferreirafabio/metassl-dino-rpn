@@ -62,7 +62,7 @@ class RPN(nn.Module):
     
         self.modules_g1 = transforms.Compose(
             [
-                transforms.ToPILImage(),
+                # transforms.ToPILImage(),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
@@ -73,7 +73,7 @@ class RPN(nn.Module):
         
         self.modules_g2 = transforms.Compose(
             [
-                transforms.ToPILImage(),
+                # transforms.ToPILImage(),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
@@ -85,7 +85,7 @@ class RPN(nn.Module):
         
         self.modules_l = transforms.Compose(
             [
-                transforms.ToPILImage(),
+                # transforms.ToPILImage(),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
@@ -115,7 +115,6 @@ class RPN(nn.Module):
             l_views1_cropped_batch.append(l_view1_cropped)
             l_views2_cropped_batch.append(l_view2_cropped)
 
-        print("test")
         # since images now have same resolution, we can transform them batch-wise
         g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
         g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
