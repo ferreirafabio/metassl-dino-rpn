@@ -96,28 +96,25 @@ class RPN(nn.Module):
         
     def forward(self, imgs):
         # g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
-        views = []
         g_views1_cropped_batch, g_views2_cropped_batch, l_views1_cropped_batch, l_views2_croped_batch = [], [], [], []
-        print(imgs)
-        imgs = torch.Tensor(imgs)
-        print(imgs.size())
-        embs = self.backbone(imgs)
-        print("embs")
-        g_views1 = self.global1_fc(embs)
-        g_views2 = self.global2_fc(embs)
-        l_views1 = self.local1_fc(embs)
-        l_views2 = self.local1_fc(embs)
 
         # since we have list of images with varying resolution, we need to transform them individually
         # additionally, transforms.Compose still does not support processing batches :(
-        for img, g_view1, g_view2, l_view1, l_view2 in zip(imgs, g_views1, g_views2, l_views1, l_views2):
+        for img in imgs:
             img = torch.squeeze(img, 0)
+            emb = self.backbone(img)
+            g_view1 = self.global1_fc(emb)
+            g_view2 = self.global2_fc(emb)
+            l_view1 = self.local1_fc(emb)
+            l_view2 = self.local1_fc(emb)
+        
             g_view1_cropped, g_view2_cropped, l_view1_cropped, l_view2_cropped = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
             g_views1_cropped_batch.append(g_view1_cropped)
             g_views2_cropped_batch.append(g_view2_cropped)
             l_views1_cropped_batch.append(l_view1_cropped)
             l_views2_croped_batch.append(l_view2_cropped)
-
+            
+        # since images now have same resolution, we can transform them batch-wise
         g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
         g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
         l_view1_tensors = torch.stack(l_views1_cropped_batch, 0).cuda()
@@ -127,8 +124,7 @@ class RPN(nn.Module):
         g_view2_transf = self.modules_g2(g_view2_tensors)
         l_view1_transf = self.modules_l(l_view1_tensors)
         l_view2_transf = self.modules_l(l_view2_tensors)
-        
-        
+          
         return [g_view1_transf, g_view2_transf, l_view1_transf, l_view2_transf]
         
         # for img in imgs:
