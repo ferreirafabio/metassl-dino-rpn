@@ -342,7 +342,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     params_groups = utils.get_params_groups(student)
     
     lst = params_groups[0]['params']
-    lst.append(rpn.parameters())
+    lst = lst + list(rpn.parameters())
     params_groups[0]['params'] = lst
     # rpn_params = utils.get_params_groups(student)
     # rpn_params = list(rpn.parameters())
