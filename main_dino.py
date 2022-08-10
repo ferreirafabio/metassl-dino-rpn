@@ -496,7 +496,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
-                    fp16_scaler, rpn, rpn_optimizer, args):
+                    fp16_scaler, rpn, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
