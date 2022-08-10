@@ -107,7 +107,8 @@ class RPN(nn.Module):
             g_view2 = self.global2_fc(emb)
             l_view1 = self.local1_fc(emb)
             l_view2 = self.local1_fc(emb)
-        
+
+            img = torch.squeeze(img, 0)
             g_view1_cropped, g_view2_cropped, l_view1_cropped, l_view2_cropped = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
             g_views1_cropped_batch.append(g_view1_cropped)
             g_views2_cropped_batch.append(g_view2_cropped)
