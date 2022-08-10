@@ -67,7 +67,7 @@ class RPN(nn.Module):
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
                 # utils.GaussianBlur(1.0),
-                kornia.augmentation.RandomGaussianBlur(kernel_size=5, sigma=(0.1, 2.0), p=1.0),
+                kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
                 self.normalize,
                 ]
             )
@@ -79,7 +79,7 @@ class RPN(nn.Module):
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
                 # utils.GaussianBlur(1.0),
-                kornia.augmentation.RandomGaussianBlur(kernel_size=5, sigma=(0.1, 2.0), p=1.0),
+                kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
                 # utils.Solarization(0.2),
                 transforms.RandomSolarize(threshold=128, p=0.2),
                 self.normalize,
@@ -94,7 +94,7 @@ class RPN(nn.Module):
                 transforms.RandomGrayscale(p=0.2),
                 # utils.GaussianBlur(0.5),
                 # transforms.RandomApply(transforms.GaussianBlur(kernel_size=5), p=0.5),
-                kornia.augmentation.RandomGaussianBlur(kernel_size=5, sigma=(0.1, 2.0), p=0.5),
+                kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.5),
                 self.normalize,
                 ]
             )
