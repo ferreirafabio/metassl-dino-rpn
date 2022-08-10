@@ -515,7 +515,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
-            rpn_loss = -loss
+            # rpn_loss = -loss
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
@@ -527,17 +527,31 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         optimizer.zero_grad()
         param_norms = None
         if fp16_scaler is None:
-            loss.backward(retain_graph=True)
+            rpn.requires_grad_(False)
+            student.requires_grad_(True)
+            teacher.requires_grad_(True)
+            
+            loss.backward()
             if args.clip_grad:
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
             optimizer.step()
+            
             # rpn
+            rpn.requires_grad_(True)
+            student.requires_grad_(False)
+            teacher.requires_grad_(False)
+
+            rpn_loss = -dino_loss(student_output, teacher_output, epoch)
             rpn_loss.backward()
             rpn_optimizer.step()
         else:
-            fp16_scaler.scale(loss).backward(retain_graph=True)
+            rpn.requires_grad_(False)
+            student.requires_grad_(True)
+            teacher.requires_grad_(True)
+            
+            fp16_scaler.scale(loss).backward()
             if args.clip_grad:
                 fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
                 param_norms = utils.clip_gradients(student, args.clip_grad)
@@ -547,6 +561,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             fp16_scaler.update()
             
             #rpn
+            rpn.requires_grad_(True)
+            student.requires_grad_(False)
+            teacher.requires_grad_(False)
+
+            rpn_loss = -dino_loss(student_output, teacher_output, epoch)
+            
             fp16_scaler.scale(rpn_loss).backward()
             fp16_scaler.step(rpn_optimizer)
             
