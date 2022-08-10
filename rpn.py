@@ -101,6 +101,7 @@ class RPN(nn.Module):
         # since we have list of images with varying resolution, we need to transform them individually
         # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
+            img = torch.unsqueeze(img, 0)
             emb = self.backbone(img)
             g_view1 = self.global1_fc(emb)
             g_view2 = self.global2_fc(emb)
