@@ -56,7 +56,6 @@ class RPN(nn.Module):
         self.local2_fc = nn.Linear(256, 2)
         
         self.normalize = transforms.Compose([
-            # transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     
@@ -66,7 +65,7 @@ class RPN(nn.Module):
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
-                # utils.GaussianBlur(1.0),
+                utils.GaussianBlur(1.0),
                 # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
                 self.normalize,
                 ]
@@ -78,9 +77,9 @@ class RPN(nn.Module):
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
-                # utils.GaussianBlur(1.0),
+                utils.GaussianBlur(1.0),
                 # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
-                # utils.Solarization(0.2),
+                utils.Solarization(0.2),
                 # transforms.RandomSolarize(threshold=128, p=0.2),
                 # kornia.augmentation.RandomSolarize(p=0.2),
                 self.normalize,
@@ -93,7 +92,7 @@ class RPN(nn.Module):
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
-                # utils.GaussianBlur(0.5),
+                utils.GaussianBlur(0.5),
                 # transforms.RandomApply(transforms.GaussianBlur(kernel_size=5), p=0.5),
                 # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.5),
                 self.normalize,
@@ -102,7 +101,7 @@ class RPN(nn.Module):
         
     def forward(self, imgs):
         # g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
-        g_views1_cropped_batch, g_views2_cropped_batch, l_views1_cropped_batch, l_views2_cropped_batch = [], [], [], []
+        g_views1_cropped_transf_batch, g_views2_cropped_transf_batch, l_views1_cropped_transf_batch, l_views2_cropped_transf_batch = [], [], [], []
 
         # since we have list of images with varying resolution, we need to transform them individually
         # additionally, transforms.Compose still does not support processing batches :(
@@ -116,10 +115,10 @@ class RPN(nn.Module):
 
             img = torch.squeeze(img, 0)
             g_view1_cropped, g_view2_cropped, l_view1_cropped, l_view2_cropped = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            g_views1_cropped_batch.append(g_view1_cropped)
-            g_views2_cropped_batch.append(g_view2_cropped)
-            l_views1_cropped_batch.append(l_view1_cropped)
-            l_views2_cropped_batch.append(l_view2_cropped)
+            g_views1_cropped_transf_batch.append(g_view1_cropped)
+            g_views2_cropped_transf_batch.append(g_view2_cropped)
+            l_views1_cropped_transf_batch.append(l_view1_cropped)
+            l_views2_cropped_transf_batch.append(l_view2_cropped)
 
         # since images now have same resolution, we can transform them batch-wise
         # g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
@@ -132,41 +131,12 @@ class RPN(nn.Module):
         # l_view1_transf = self.modules_l(l_view1_tensors)
         # l_view2_transf = self.modules_l(l_view2_tensors)
         
-        g_view1_transf = torch.stack(g_views1_cropped_batch, 0).cuda()
-        g_view2_transf = torch.stack(g_views2_cropped_batch, 0).cuda()
-        l_view1_transf = torch.stack(l_views1_cropped_batch, 0).cuda()
-        l_view2_transf = torch.stack(l_views2_cropped_batch, 0).cuda()
+        g_view1_transf = torch.stack(g_views1_cropped_transf_batch, 0).cuda()
+        g_view2_transf = torch.stack(g_views2_cropped_transf_batch, 0).cuda()
+        l_view1_transf = torch.stack(l_views1_cropped_transf_batch, 0).cuda()
+        l_view2_transf = torch.stack(l_views2_cropped_transf_batch, 0).cuda()
         
         return [g_view1_transf, g_view2_transf, l_view1_transf, l_view2_transf]
-        
-        # for img in imgs:
-        #     img = torch.unsqueeze(img, 0)
-        #     emb = self.backbone(img)
-        #     g_view1 = self.global1_fc(emb)
-        #     g_view2 = self.global2_fc(emb)
-        #     l_view1 = self.local1_fc(emb)
-        #     l_view2 = self.local1_fc(emb)
-            
-            # img = torch.squeeze(img, 0)
-            # g_view1, g_view2, l_view1, l_view2 = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            # views.append(self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img))
-            # g_view1_tensors.append(g_view1)
-            # g_view2_tensors.append(g_view2)
-            # l_view1_tensors.append(l_view1)
-            # l_view2_tensors.append(l_view2)
-    
-        # g_view1_tensors = torch.stack(g_view1_tensors, 0).cuda()
-        # g_view2_tensors = torch.stack(g_view2_tensors, 0).cuda()
-        # l_view1_tensors = torch.stack(l_view1_tensors, 0).cuda()
-        # l_view2_tensors = torch.stack(l_view2_tensors, 0).cuda()
-        
-        # print("-------------------------")
-        # print(g_view1_tensors.size())
-        # print(g_view2_tensors.size())
-        # print(l_view1_tensors.size())
-        # print(l_view2_tensors.size())
-
-        # return [g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors]
 
     def _get_cropped_imgs(self, g_view1_coords, g_view2_cords, l_view1_coords, l_view2_coords, img):
         
