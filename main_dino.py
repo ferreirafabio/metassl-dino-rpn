@@ -561,6 +561,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                                               args.freeze_last_layer)
 
             # print(rpn.module.backbone.fc.weight.grad)
+            for name, param in rpn.module.named_parameters():
+                if param.requires_grad:
+                    print(name)
+                    
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
             
