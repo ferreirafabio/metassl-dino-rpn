@@ -534,7 +534,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # student.requires_grad_(True)
             # teacher.requires_grad_(True)
             
-            loss.backward(retain_graph=True)
+            loss.backward()
             if args.clip_grad:
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
@@ -555,7 +555,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # student.requires_grad_(True)
             # teacher.requires_grad_(True)
             
-            fp16_scaler.scale(loss).backward(retain_graph=True)
+            fp16_scaler.scale(loss).backward()
             if args.clip_grad:
                 fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
                 param_norms = utils.clip_gradients(student, args.clip_grad)
