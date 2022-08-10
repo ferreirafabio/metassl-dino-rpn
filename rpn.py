@@ -20,6 +20,24 @@ from torchvision import transforms
 import utils
 import kornia
 
+
+class GradientReverse(torch.autograd.Function):
+    scale = 1.0
+    
+    @staticmethod
+    def forward(ctx, x):
+        return x.view_as(x)
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        return GradientReverse.scale * grad_output.neg()
+
+
+def grad_reverse(x, scale=1.0):
+    GradientReverse.scale = scale
+    return GradientReverse.apply(x)
+
+
 class ResNetRPN(nn.Module):
     def __init__(self, backbone='resnet50', backbone_path=None):
         super().__init__()
@@ -41,6 +59,7 @@ class ResNetRPN(nn.Module):
         self.backbone = backbone
 
     def forward(self, x):
+        x = grad_reverse(x)
         x = self.backbone(x)
         return x
 
@@ -101,7 +120,8 @@ class RPN(nn.Module):
             )
         
     def forward(self, imgs):
-        # g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
+        
+        
         g_views1_cropped_transf, g_views2_cropped_transf, l_views1_cropped_transf, l_views2_cropped_transf = [], [], [], []
 
         # since we have list of images with varying resolution, we need to transform them individually
@@ -109,6 +129,7 @@ class RPN(nn.Module):
         for img in imgs:
             img = torch.unsqueeze(img, 0)
             emb = self.backbone(img)
+            emb = grad_reverse(emb)
             g_view1 = self.global1_fc(emb)
             g_view2 = self.global2_fc(emb)
             l_view1 = self.local1_fc(emb)
