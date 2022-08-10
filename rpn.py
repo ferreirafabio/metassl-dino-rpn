@@ -122,15 +122,20 @@ class RPN(nn.Module):
             l_views2_cropped_batch.append(l_view2_cropped)
 
         # since images now have same resolution, we can transform them batch-wise
-        g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
-        g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
-        l_view1_tensors = torch.stack(l_views1_cropped_batch, 0).cuda()
-        l_view2_tensors = torch.stack(l_views2_cropped_batch, 0).cuda()
+        # g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
+        # g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
+        # l_view1_tensors = torch.stack(l_views1_cropped_batch, 0).cuda()
+        # l_view2_tensors = torch.stack(l_views2_cropped_batch, 0).cuda()
 
-        g_view1_transf = self.modules_g1(g_view1_tensors)
-        g_view2_transf = self.modules_g2(g_view2_tensors)
-        l_view1_transf = self.modules_l(l_view1_tensors)
-        l_view2_transf = self.modules_l(l_view2_tensors)
+        # g_view1_transf = self.modules_g1(g_view1_tensors)
+        # g_view2_transf = self.modules_g2(g_view2_tensors)
+        # l_view1_transf = self.modules_l(l_view1_tensors)
+        # l_view2_transf = self.modules_l(l_view2_tensors)
+        
+        g_view1_transf = torch.stack(g_views1_cropped_batch, 0).cuda()
+        g_view2_transf = torch.stack(g_views2_cropped_batch, 0).cuda()
+        l_view1_transf = torch.stack(l_views1_cropped_batch, 0).cuda()
+        l_view2_transf = torch.stack(l_views2_cropped_batch, 0).cuda()
         
         return [g_view1_transf, g_view2_transf, l_view1_transf, l_view2_transf]
         
@@ -167,16 +172,16 @@ class RPN(nn.Module):
         
         # using crop functionality with padding
         g_view1 = crop(img, top=g_view1_coords[:, 0].int(), left=g_view1_coords[:, 1].int(), height=244, width=224)
-        # g_view1 = self.modules_g1(g_view1)
+        g_view1 = self.modules_g1(g_view1)
     
         g_view2 = crop(img, top=g_view2_cords[:, 0].int(), left=g_view2_cords[:, 1].int(), height=244, width=224)
-        # g_view2 = self.modules_g2(g_view2)
+        g_view2 = self.modules_g2(g_view2)
         
         l_view1 = crop(img, top=l_view1_coords[:, 0].int(), left=l_view1_coords[:, 1].int(), height=96, width=96)
-        # l_view1 = self.modules_l(l_view1)
+        l_view1 = self.modules_l(l_view1)
 
         l_view2 = crop(img, top=l_view2_coords[:, 0].int(), left=l_view2_coords[:, 1].int(), height=96, width=96)
-        # l_view2 = self.modules_l(l_view2)
+        l_view2 = self.modules_l(l_view2)
 
         return g_view1, g_view2, l_view1, l_view2
         
