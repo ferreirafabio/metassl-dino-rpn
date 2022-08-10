@@ -26,6 +26,7 @@ class GradientReverse(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, x):
+        #  autograd checks for changes in tensor to determine if backward should be called
         return x.view_as(x)
     
     @staticmethod
@@ -120,8 +121,6 @@ class RPN(nn.Module):
             )
         
     def forward(self, imgs):
-        
-        
         g_views1_cropped_transf, g_views2_cropped_transf, l_views1_cropped_transf, l_views2_cropped_transf = [], [], [], []
 
         # since we have list of images with varying resolution, we need to transform them individually

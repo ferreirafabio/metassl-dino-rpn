@@ -518,7 +518,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
-            # rpn_loss = -loss
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
@@ -547,8 +546,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # student.requires_grad_(False)
             # teacher.requires_grad_(False)
     
-            # rpn_loss = -dino_loss(student_output, teacher_output, epoch)
-            # rpn_loss.backward()
+            # (-loss).backward()
             # rpn_optimizer.step()
         else:
             # rpn.requires_grad_(False)
@@ -561,6 +559,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
+
+            print(rpn.module.fc.weight.grad)
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
             
@@ -569,10 +569,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # rpn.requires_grad_(True)
             # student.requires_grad_(False)
             # teacher.requires_grad_(False)
-
-            # rpn_loss = -dino_loss(student_output, teacher_output, epoch)
     
-            # fp16_scaler.scale(rpn_loss).backward()
+            # fp16_scaler.scale(-loss).backward()
             # fp16_scaler.step(rpn_optimizer)
             
 
