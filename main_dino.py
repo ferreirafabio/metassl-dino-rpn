@@ -342,8 +342,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     params_groups = utils.get_params_groups(student)
     if args.optimizer == "adamw":
         # optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
-        print(params_groups.keys())
-        optimizer = torch.optim.AdamW(params_groups + list(rpn.parameters()))  # to use with ViTs
+        optimizer = torch.optim.AdamW(params_groups + {'params': list(rpn.parameters())})  # to use with ViTs
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
     elif args.optimizer == "lars":
