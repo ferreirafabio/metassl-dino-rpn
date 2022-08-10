@@ -349,7 +349,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     params_groups.append({'params': rpn_params})
     
     for p in params_groups:
-        for k,v in p:
+        for k, v in p.items():
             print(k, v)
     
     if args.optimizer == "adamw":
