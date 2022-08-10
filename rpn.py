@@ -81,7 +81,8 @@ class RPN(nn.Module):
                 # utils.GaussianBlur(1.0),
                 kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
                 # utils.Solarization(0.2),
-                transforms.RandomSolarize(threshold=128, p=0.2),
+                # transforms.RandomSolarize(threshold=128, p=0.2),
+                kornia.augmentation.RandomSolarize(p=0.2),
                 self.normalize,
                 ]
             )
