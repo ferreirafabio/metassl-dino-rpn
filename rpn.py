@@ -67,7 +67,7 @@ class RPN(nn.Module):
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
                 # utils.GaussianBlur(1.0),
-                kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
+                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
                 self.normalize,
                 ]
             )
@@ -79,10 +79,10 @@ class RPN(nn.Module):
                 transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
                 transforms.RandomGrayscale(p=0.2),
                 # utils.GaussianBlur(1.0),
-                kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
+                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
                 # utils.Solarization(0.2),
                 # transforms.RandomSolarize(threshold=128, p=0.2),
-                kornia.augmentation.RandomSolarize(p=0.2),
+                # kornia.augmentation.RandomSolarize(p=0.2),
                 self.normalize,
                 ]
             )
@@ -95,7 +95,7 @@ class RPN(nn.Module):
                 transforms.RandomGrayscale(p=0.2),
                 # utils.GaussianBlur(0.5),
                 # transforms.RandomApply(transforms.GaussianBlur(kernel_size=5), p=0.5),
-                kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.5),
+                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.5),
                 self.normalize,
                 ]
             )
@@ -122,15 +122,15 @@ class RPN(nn.Module):
             l_views2_cropped_batch.append(l_view2_cropped)
 
         # since images now have same resolution, we can transform them batch-wise
-        g_view1_tensors = torch.stack(g_views1_cropped_batch, 0)
-        g_view2_tensors = torch.stack(g_views2_cropped_batch, 0)
-        l_view1_tensors = torch.stack(l_views1_cropped_batch, 0)
-        l_view2_tensors = torch.stack(l_views2_cropped_batch, 0)
+        g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
+        g_view2_tensors = torch.stack(g_views2_cropped_batch, 0).cuda()
+        l_view1_tensors = torch.stack(l_views1_cropped_batch, 0).cuda()
+        l_view2_tensors = torch.stack(l_views2_cropped_batch, 0).cuda()
 
-        g_view1_transf = self.modules_g1(g_view1_tensors).cuda()
-        g_view2_transf = self.modules_g2(g_view2_tensors).cuda()
-        l_view1_transf = self.modules_l(l_view1_tensors).cuda()
-        l_view2_transf = self.modules_l(l_view2_tensors).cuda()
+        g_view1_transf = self.modules_g1(g_view1_tensors)
+        g_view2_transf = self.modules_g2(g_view2_tensors)
+        l_view1_transf = self.modules_l(l_view1_tensors)
+        l_view2_transf = self.modules_l(l_view2_tensors)
         
         return [g_view1_transf, g_view2_transf, l_view1_transf, l_view2_transf]
         
