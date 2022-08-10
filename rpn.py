@@ -98,8 +98,9 @@ class RPN(nn.Module):
         # g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
         views = []
         g_views1_cropped_batch, g_views2_cropped_batch, l_views1_cropped_batch, l_views2_croped_batch = [], [], [], []
-        
-        embs = self.backbone(torch.Tensor(imgs))
+        imgs = torch.Tensor(imgs)
+        print(imgs.size())
+        embs = self.backbone(imgs)
         print("embs")
         g_views1 = self.global1_fc(embs)
         g_views2 = self.global2_fc(embs)
