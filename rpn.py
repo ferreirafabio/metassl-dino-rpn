@@ -102,7 +102,7 @@ class RPN(nn.Module):
         
     def forward(self, imgs):
         # g_view1_tensors, g_view2_tensors, l_view1_tensors, l_view2_tensors = [], [], [], []
-        g_views1_cropped_transf_batch, g_views2_cropped_transf_batch, l_views1_cropped_transf_batch, l_views2_cropped_transf_batch = [], [], [], []
+        g_views1_cropped_transf, g_views2_cropped_transf, l_views1_cropped_transf, l_views2_cropped_transf = [], [], [], []
 
         # since we have list of images with varying resolution, we need to transform them individually
         # additionally, transforms.Compose still does not support processing batches :(
@@ -116,10 +116,10 @@ class RPN(nn.Module):
 
             img = torch.squeeze(img, 0)
             g_view1_cropped, g_view2_cropped, l_view1_cropped, l_view2_cropped = self._get_cropped_imgs(g_view1, g_view2, l_view1, l_view2, img)
-            g_views1_cropped_transf_batch.append(g_view1_cropped)
-            g_views2_cropped_transf_batch.append(g_view2_cropped)
-            l_views1_cropped_transf_batch.append(l_view1_cropped)
-            l_views2_cropped_transf_batch.append(l_view2_cropped)
+            g_views1_cropped_transf.append(g_view1_cropped)
+            g_views2_cropped_transf.append(g_view2_cropped)
+            l_views1_cropped_transf.append(l_view1_cropped)
+            l_views2_cropped_transf.append(l_view2_cropped)
 
         # since images now have same resolution, we can transform them batch-wise
         # g_view1_tensors = torch.stack(g_views1_cropped_batch, 0).cuda()
@@ -132,10 +132,10 @@ class RPN(nn.Module):
         # l_view1_transf = self.modules_l(l_view1_tensors)
         # l_view2_transf = self.modules_l(l_view2_tensors)
         
-        g_view1_transf = torch.stack(g_views1_cropped_transf_batch, 0).cuda()
-        g_view2_transf = torch.stack(g_views2_cropped_transf_batch, 0).cuda()
-        l_view1_transf = torch.stack(l_views1_cropped_transf_batch, 0).cuda()
-        l_view2_transf = torch.stack(l_views2_cropped_transf_batch, 0).cuda()
+        g_view1_transf = torch.stack(g_views1_cropped_transf, 0).cuda()
+        g_view2_transf = torch.stack(g_views2_cropped_transf, 0).cuda()
+        l_view1_transf = torch.stack(l_views1_cropped_transf, 0).cuda()
+        l_view2_transf = torch.stack(l_views2_cropped_transf, 0).cuda()
         
         return [g_view1_transf, g_view2_transf, l_view1_transf, l_view2_transf]
 
@@ -155,81 +155,3 @@ class RPN(nn.Module):
         l_view2 = self.modules_l(l_view2)
 
         return g_view1, g_view2, l_view1, l_view2
-        
-        
-class SSD300(nn.Module):
-    def __init__(self, backbone=ResNetRPN('resnet50')):
-        super().__init__()
-
-        self.feature_extractor = backbone
-
-        self.label_num = 81  # number of COCO classes
-        self._build_additional_features(self.feature_extractor.out_channels)
-        self.num_defaults = [4, 6, 6, 6, 4, 4]
-        self.loc = []
-        self.conf = []
-
-        for nd, oc in zip(self.num_defaults, self.feature_extractor.out_channels):
-            self.loc.append(nn.Conv2d(oc, nd * 4, kernel_size=3, padding=1))
-            self.conf.append(nn.Conv2d(oc, nd * self.label_num, kernel_size=3, padding=1))
-
-        self.loc = nn.ModuleList(self.loc)
-        self.conf = nn.ModuleList(self.conf)
-        self._init_weights()
-
-    def _build_additional_features(self, input_size):
-        self.additional_blocks = []
-        for i, (input_size, output_size, channels) in enumerate(zip(input_size[:-1], input_size[1:], [256, 256, 128, 128, 128])):
-            if i < 3:
-                layer = nn.Sequential(
-                    nn.Conv2d(input_size, channels, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(channels),
-                    nn.ReLU(inplace=True),
-                    nn.Conv2d(channels, output_size, kernel_size=3, padding=1, stride=2, bias=False),
-                    nn.BatchNorm2d(output_size),
-                    nn.ReLU(inplace=True),
-                )
-            else:
-                layer = nn.Sequential(
-                    nn.Conv2d(input_size, channels, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(channels),
-                    nn.ReLU(inplace=True),
-                    nn.Conv2d(channels, output_size, kernel_size=3, bias=False),
-                    nn.BatchNorm2d(output_size),
-                    nn.ReLU(inplace=True),
-                )
-
-            self.additional_blocks.append(layer)
-
-        self.additional_blocks = nn.ModuleList(self.additional_blocks)
-
-    def _init_weights(self):
-        layers = [*self.additional_blocks, *self.loc, *self.conf]
-        for layer in layers:
-            for param in layer.parameters():
-                if param.dim() > 1: nn.init.xavier_uniform_(param)
-
-    # Shape the classifier to the view of bboxes
-    def bbox_view(self, src, loc, conf):
-        ret = []
-        for s, l, c in zip(src, loc, conf):
-            ret.append((l(s).view(s.size(0), 4, -1), c(s).view(s.size(0), self.label_num, -1)))
-
-        locs, confs = list(zip(*ret))
-        locs, confs = torch.cat(locs, 2).contiguous(), torch.cat(confs, 2).contiguous()
-        return locs, confs
-
-    def forward(self, x):
-        x = self.feature_extractor(x)
-
-        detection_feed = [x]
-        for l in self.additional_blocks:
-            x = l(x)
-            detection_feed.append(x)
-
-        # Feature Map 38x38x4, 19x19x6, 10x10x6, 5x5x6, 3x3x4, 1x1x4
-        locs, confs = self.bbox_view(detection_feed, self.loc, self.conf)
-
-        # For SSD 300, shall return nbatch x 8732 x {nlabels, nlocs} results
-        return locs, confs
-

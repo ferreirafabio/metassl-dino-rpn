@@ -346,6 +346,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
+        
+    rpn_optimizer = torch.optim.AdamW(rpn.parameters())
+    
     # for mixed precision training
     fp16_scaler = None
     if args.use_fp16:
@@ -406,7 +409,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-                epoch, fp16_scaler, rpn, args)
+                epoch, fp16_scaler, rpn, rpn_optimizer, args)
     
             # ============ writing logs ... ============
             save_dict = {
@@ -490,7 +493,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
-                    fp16_scaler, rpn, args):
+                    fp16_scaler, rpn, rpn_optimizer, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
@@ -512,11 +515,14 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
+            rpn_loss = -loss
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
 
+        rpn_optimizer.zero_grad()
+    
         # student update
         optimizer.zero_grad()
         param_norms = None
@@ -527,6 +533,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
             optimizer.step()
+            # rpn
+            rpn_loss.backward()
+            rpn_optimizer.step()
         else:
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
@@ -536,6 +545,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                                               args.freeze_last_layer)
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
+            
+            #rpn
+            fp16_scaler.scale(rpn_loss).backward()
+            fp16_scaler.step(rpn_optimizer)
+            
 
         # EMA update for the teacher
         with torch.no_grad():
