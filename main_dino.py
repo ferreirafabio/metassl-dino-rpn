@@ -577,10 +577,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            # print(rpn.module.backbone.backbone.localization.linear.weight)
-            for name, param in rpn.module.backbone.localization.named_parameters():
-                if param.requires_grad:
-                    print(name)
+            print(rpn.module.backbone.localization.fc.weight)
+            # for name, param in rpn.module.backbone.localization.named_parameters():
+            #     if param.requires_grad:
+            #         print(name)
                     
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
