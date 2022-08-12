@@ -320,7 +320,7 @@ class AugmentationNetwork(nn.Module):
         for img in imgs:
             img = torch.unsqueeze(img, 0)
             # emb = grad_reverse(emb)
-            global_local_views = self.backbone(img)
+            global_local_views = self.transform_net(img)
             # img = torch.squeeze(img, 0)
             g1_augmented = self.modules_g1(torch.squeeze(global_local_views[0], 0))
             g2_augmented = self.modules_g2(torch.squeeze(global_local_views[1], 0))
