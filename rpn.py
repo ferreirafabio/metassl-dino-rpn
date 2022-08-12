@@ -74,7 +74,7 @@ class ResNetRPN(nn.Module):
         self.backbone = backbone
 
     def forward(self, x):
-        # x = grad_reverse(x)
+        x = grad_reverse(x)
         x = self.backbone(x)
         return x
 
@@ -228,7 +228,7 @@ class STN(nn.Module):
     
     def forward(self, x):
         xs = self.localization_net(x)
-        # xs = xs.view(-1, self.localization_dim)
+        x = grad_reverse(x)
         theta_g1 = self.fc_localization_global1(xs)
         theta_g2 = self.fc_localization_global2(xs)
         theta_l1 = self.fc_localization_local1(xs)
@@ -313,7 +313,7 @@ class AugmentationNetwork(nn.Module):
         # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
             img = torch.unsqueeze(img, 0)
-            # emb = grad_reverse(emb)
+            img = grad_reverse(img)
             global_local_views = self.transform_net(img)
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
