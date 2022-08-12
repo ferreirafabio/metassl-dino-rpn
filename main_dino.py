@@ -578,7 +578,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                                               args.freeze_last_layer)
 
                 
-            print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
+            # print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
             print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
