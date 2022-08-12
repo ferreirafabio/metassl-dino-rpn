@@ -345,20 +345,15 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     student_params = params_groups[0]['params']
     all_params = student_params + list(rpn.parameters())
     params_groups[0]['params'] = all_params
-
-    # for name, param in rpn.named_parameters:
-    #     print(name, param)
     
     # print(list(rpn.parameters()))
-    for name, param in rpn.named_parameters():
-        if param.requires_grad:
-            print(name)
+    # for name, param in rpn.named_parameters():
+    #     if param.requires_grad:
+    #         print(name)
     
-    # params_groups.append({'params': rpn_params})
-    
-    # for p in params_groups:
-    #     for k, v in p.items():
-    #         print(k, v)
+    for p in params_groups:
+        for k, v in p.items():
+            print(k, v)
     
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
