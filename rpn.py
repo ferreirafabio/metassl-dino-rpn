@@ -241,18 +241,21 @@ class STN(nn.Module):
         theta_l1 = self._get_stn_mode_theta(theta_l1, xs)
         theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
         
-        print("xxxxxxxxxxxxxxxxxxxxxxxx", theta_g1.size())
-        grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [32, 32])
+        grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
         g1 = F.grid_sample(x, grid)
+        print("xxxxxxxxxxxxxxxxxxxxxxxx", g1.size())
 
-        grid = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [32, 32])
+        grid = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [224, 224])
         g2 = F.grid_sample(x, grid)
+        print("xxxxxxxxxxxxxxxxxxxxxxxx", g2.size())
 
         grid = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [96, 96])
         l1 = F.grid_sample(x, grid)
+        print("xxxxxxxxxxxxxxxxxxxxxxxx", l1.size())
 
         grid = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [96, 96])
         l2 = F.grid_sample(x, grid)
+        print("xxxxxxxxxxxxxxxxxxxxxxxx", l2.size())
         
         return [g1, g2, l1, l2]
         
