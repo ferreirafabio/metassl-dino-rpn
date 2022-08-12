@@ -132,7 +132,7 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
-    parser.add_argument('--saveckp_freq', default=20, type=int, help='Save checkpoint every x epochs.')
+    parser.add_argument('--saveckp_freq', default=5, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
@@ -569,7 +569,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # rpn.requires_grad_(False)
             # student.requires_grad_(True)
             # teacher.requires_grad_(True)
-            rpn.requires_grad_(True)
             
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
@@ -581,6 +580,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
             # print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
             print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+            print("--------------------------------------------------------")
             print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
