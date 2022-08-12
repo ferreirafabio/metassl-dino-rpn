@@ -288,7 +288,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         teacher = torchvision_models.__dict__[args.arch]()
         embed_dim = student.fc.weight.shape[1]
     else:
-        print(f"Unknow architecture: {args.arch}")
+        print(f"Unknown architecture: {args.arch}")
 
     rpn = AugmentationNetwork(transform_net=STN(stn_mode="affine"))
     # rpn = RPN(backbone=ResNetRPN('resnet18'))
@@ -351,9 +351,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #     if param.requires_grad:
     #         print(name)
     
-    for p in params_groups:
-        for k, v in p.items():
-            print(k, v)
+    # for p in params_groups:
+    #     for k, v in p.items():
+    #         print(k, v)
     
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
