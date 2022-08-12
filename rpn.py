@@ -90,7 +90,7 @@ class STN(nn.Module):
         self.localization_dim = localization_dim
         
         # Spatial transformer localization-network
-        self.localization = ResNetRPN("resnet18", out_dim=localization_dim)
+        self.localization_net = ResNetRPN("resnet18", out_dim=localization_dim)
         
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = nn.Sequential(
@@ -227,7 +227,7 @@ class STN(nn.Module):
         return theta_new
     
     def forward(self, x):
-        xs = self.localization(x)
+        xs = self.localization_net(x)
         print("----------------------", xs.size())
         xs = xs.view(-1, self.localization_dim)
         print("----------------------", xs.size())
@@ -261,10 +261,10 @@ class STN(nn.Module):
         
     
 class AugmentationNetwork(nn.Module):
-    def __init__(self, augmentation_net=STN(stn_mode="affine")):
+    def __init__(self, transform_net=STN(stn_mode="affine")):
         super().__init__()
         print("Initializing Augmentation Network")
-        self.augmentation_net = augmentation_net
+        self.transform_net = transform_net
 
         self.normalize = transforms.Compose(
             [

@@ -290,7 +290,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknow architecture: {args.arch}")
 
-    rpn = AugmentationNetwork(backbone=STN(stn_mode="affine"))
+    rpn = AugmentationNetwork(transform_net=STN(stn_mode="affine"))
     # rpn = RPN(backbone=ResNetRPN('resnet18'))
     
     # multi-crop wrapper handles forward with inputs of different resolutions
@@ -578,7 +578,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                                               args.freeze_last_layer)
 
             print(rpn.module.augmentation_net)
-            print(rpn.module.augmentation_net.localization.backbone.fc.weight)
+            print(rpn.module.augmentation_net.transform_net.localization_net.backbone.fc.weight)
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
             #     if param.requires_grad:
