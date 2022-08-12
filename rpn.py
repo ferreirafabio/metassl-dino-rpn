@@ -266,7 +266,7 @@ class STN(nn.Module):
         
     
 class AugmentationNetwork(nn.Module):
-    def __init__(self, backbone=STN()):
+    def __init__(self, backbone=STN(stn_mode="affine")):
         super().__init__()
         print("Initializing Augmentation Network")
         self.backbone = backbone

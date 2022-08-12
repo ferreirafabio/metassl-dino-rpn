@@ -40,8 +40,8 @@ from utils import custom_collate
 import vision_transformer as vits
 from vision_transformer import DINOHead
 from functools import partial
-from rpn import RPN
-from rpn import ResNetRPN
+from rpn import AugmentationNetwork
+from rpn import STN
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -290,7 +290,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknow architecture: {args.arch}")
 
-    rpn = RPN(backbone=ResNetRPN('resnet18'))
+    rpn = AugmentationNetwork(backbone=STN(stn_mode="affine"))
+    # rpn = RPN(backbone=ResNetRPN('resnet18'))
     
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
@@ -551,7 +552,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
             
-            print(rpn.module.backbone.backbone.fc.weight)
+            print(rpn.module.backbone.backbone.localization.weight)
             
             optimizer.step()
             
@@ -575,7 +576,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            print(rpn.module.backbone.backbone.fc.weight)
+            print(rpn.module.backbone.backbone.localization.linear.weight)
             # for name, param in rpn.module.backbone.backbone.named_parameters():
             #     if param.requires_grad:
             #         print(name)
