@@ -239,6 +239,7 @@ class STN(nn.Module):
     
     def forward(self, x):
         xs = self.localization(x)
+        print("----------------------", xs.size())
         xs = xs.view(-1, 10 * 3 * 3)
         theta_g1 = self.fc_localization_global1(xs)
         theta_g2 = self.fc_localization_global2(xs)
