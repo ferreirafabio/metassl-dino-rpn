@@ -578,7 +578,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                                               args.freeze_last_layer)
 
             # print(rpn.module.backbone.backbone.localization.linear.weight)
-            for name, param in rpn.module.backbone.backbone.named_parameters():
+            for name, param in rpn.module.backbone.localization.named_parameters():
                 if param.requires_grad:
                     print(name)
                     
