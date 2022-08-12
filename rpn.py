@@ -54,7 +54,7 @@ def grad_reverse(x, scale=1.0):
 
 
 class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet50', backbone_path=None):
+    def __init__(self, backbone='resnet50', backbone_path=None, out_dim=256):
         super().__init__()
         if backbone == 'resnet18':
             backbone = resnet18(pretrained=not backbone_path)
@@ -69,12 +69,12 @@ class ResNetRPN(nn.Module):
         if backbone_path:
             backbone.load_state_dict(torch.load(backbone_path))
 
-        backbone.fc = nn.Linear(512, 256)
+        backbone.fc = nn.Linear(256, out_dim)
         torch.nn.init.xavier_uniform_(backbone.fc.weight)
         self.backbone = backbone
 
     def forward(self, x):
-        x = grad_reverse(x)
+        # x = grad_reverse(x)
         x = self.backbone(x)
         return x
 
@@ -83,47 +83,45 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network
     """""
-    def __init__(self, stn_mode='affine'):
+    def __init__(self, stn_mode='affine', localization_dim=256):
         super(STN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
-        self.fc2 = nn.Linear(50, 10)
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
+        self.localization_dim = localization_dim
         
         # Spatial transformer localization-network
-        self.localization = nn.Sequential(
-            nn.Conv2d(3, 8, kernel_size=7),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(True),
-            nn.Conv2d(8, 10, kernel_size=5),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(True)
-            )
+        self.localization = ResNetRPN("resnet-18", out_dim=localization_dim)
+            
+            # nn.Sequential(
+            # nn.Conv2d(3, 8, kernel_size=7),
+            # nn.MaxPool2d(2, stride=2),
+            # nn.ReLU(True),
+            # nn.Conv2d(8, 10, kernel_size=5),
+            # nn.MaxPool2d(2, stride=2),
+            # nn.ReLU(True)
+            # )
         
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = nn.Sequential(
-            nn.Linear(10 * 3 * 3, 32),
+            nn.Linear(self.localization_dim, 32),
             nn.ReLU(True),
             nn.Linear(32, self.stn_n_params)
             )
 
         self.fc_localization_global2 = nn.Sequential(
-            nn.Linear(10 * 3 * 3, 32),
+            nn.Linear(self.localization_dim, 32),
             nn.ReLU(True),
             nn.Linear(32, self.stn_n_params)
             )
 
         self.fc_localization_local1 = nn.Sequential(
-            nn.Linear(10 * 3 * 3, 32),
+            nn.Linear(self.localization_dim, 32),
             nn.ReLU(True),
             nn.Linear(32, self.stn_n_params)
             )
         
         self.fc_localization_local2 = nn.Sequential(
-            nn.Linear(10 * 3 * 3, 32),
+            nn.Linear(self.localization_dim, 32),
             nn.ReLU(True),
             nn.Linear(32, self.stn_n_params)
             )
@@ -240,7 +238,7 @@ class STN(nn.Module):
     def forward(self, x):
         xs = self.localization(x)
         print("----------------------", xs.size())
-        xs = xs.view(-1, 10 * 3 * 3)
+        xs = xs.view(-1, self.localization_dim)
         print("----------------------", xs.size())
         theta_g1 = self.fc_localization_global1(xs)
         theta_g2 = self.fc_localization_global2(xs)
@@ -252,7 +250,7 @@ class STN(nn.Module):
         theta_l1 = self._get_stn_mode_theta(theta_l1, xs)
         theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
         
-        print("-----------------------------------", theta_g1.size())
+        print("xxxxxxxxxxxxxxxxxxxxxxxx", theta_g1.size())
         grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [32, 32])
         g1 = F.grid_sample(x, grid)
 
