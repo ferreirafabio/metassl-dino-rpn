@@ -14,11 +14,25 @@
 
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from torchvision.models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
 from torchvision.transforms.functional import crop
 from torchvision import transforms
 import utils
 import kornia
+
+
+N_PARAMS = {
+        'affine': 6,
+        'translation': 2,
+        'rotation': 1,
+        'scale': 2,
+        'shear': 2,
+        'rotation_scale': 3,
+        'translation_scale': 4,
+        'rotation_translation': 3,
+        'rotation_translation_scale': 5
+    }
 
 
 class GradientReverse(torch.autograd.Function):
@@ -65,8 +79,274 @@ class ResNetRPN(nn.Module):
         return x
 
 
+class STN(nn.Module):
+    """"
+    Spatial Transformer Network
+    """""
+    def __init__(self, stn_mode='affine'):
+        super(STN, self).__init__()
+        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.conv2_drop = nn.Dropout2d()
+        self.fc1 = nn.Linear(320, 50)
+        self.fc2 = nn.Linear(50, 10)
+        self.stn_mode = stn_mode
+        self.stn_n_params = N_PARAMS[stn_mode]
+        
+        # Spatial transformer localization-network
+        self.localization = nn.Sequential(
+            nn.Conv2d(1, 8, kernel_size=7),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            nn.Conv2d(8, 10, kernel_size=5),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True)
+            )
+        
+        # Regressors for the 3 * 2 affine matrix
+        self.fc_localization_global1 = nn.Sequential(
+            nn.Linear(10 * 3 * 3, 32),
+            nn.ReLU(True),
+            nn.Linear(32, self.stn_n_params)
+            )
+
+        self.fc_localization_global2 = nn.Sequential(
+            nn.Linear(10 * 3 * 3, 32),
+            nn.ReLU(True),
+            nn.Linear(32, self.stn_n_params)
+            )
+
+        self.fc_localization_local1 = nn.Sequential(
+            nn.Linear(10 * 3 * 3, 32),
+            nn.ReLU(True),
+            nn.Linear(32, self.stn_n_params)
+            )
+        
+        self.fc_localization_local2 = nn.Sequential(
+            nn.Linear(10 * 3 * 3, 32),
+            nn.ReLU(True),
+            nn.Linear(32, self.stn_n_params)
+            )
+        
+        # Initialize the weights/bias with identity transformation
+        self.fc_localization_global1[2].weight.data.fill_(0)
+        self.fc_localization_global1[2].weight.data.zero_()
+        
+        self.fc_localization_global2[2].weight.data.fill_(0)
+        self.fc_localization_global2[2].weight.data.zero_()
+        
+        self.fc_localization_local1[2].weight.data.fill_(0)
+        self.fc_localization_local1[2].weight.data.zero_()
+        
+        self.fc_localization_local2[2].weight.data.fill_(0)
+        self.fc_localization_local2[2].weight.data.zero_()
+        
+        if self.stn_mode == 'affine':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+            
+        elif self.stn_mode in ['translation', 'shear']:
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+        elif self.stn_mode == 'scale':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+        elif self.stn_mode == 'rotation':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
+        elif self.stn_mode == 'rotation_scale':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+        elif self.stn_mode == 'translation_scale':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+        elif self.stn_mode == 'rotation_translation':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+        elif self.stn_mode == 'rotation_translation_scale':
+            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            
+    def _get_stn_mode_theta(self, theta, x):
+        if self.stn_mode == 'affine':
+            theta_new = theta.view(-1, 2, 3)
+        else:
+            theta_new = torch.zeros([x.size(0), 2, 3], dtype=torch.float32, device=x.get_device(), requires_grad=True)
+            # theta1 = Variable(torch.zeros([x.size(0), 2, 3], dtype=torch.float32, device=x.get_device()), requires_grad=True)
+            theta_new = theta_new + 0
+            theta_new[:, 0, 0] = 1.0
+            theta_new[:, 1, 1] = 1.0
+            if self.stn_mode == 'translation':
+                theta_new[:, 0, 2] = theta[:, 0]
+                theta_new[:, 1, 2] = theta[:, 1]
+            elif self.stn_mode == 'rotation':
+                angle = theta[:, 0]
+                theta_new[:, 0, 0] = torch.cos(angle)
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle)
+            elif self.stn_mode == 'scale':
+                theta_new[:, 0, 0] = theta[:, 0]
+                theta_new[:, 1, 1] = theta[:, 1]
+            elif self.stn_mode == 'shear':
+                theta_new[:, 0, 1] = theta[:, 0]
+                theta_new[:, 1, 0] = theta[:, 1]
+            elif self.stn_mode == 'rotation_scale':
+                angle = theta[:, 0]
+                theta_new[:, 0, 0] = torch.cos(angle) * theta[:, 1]
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle) * theta[:, 2]
+            elif self.stn_mode == 'translation_scale':
+                theta_new[:, 0, 2] = theta[:, 0]
+                theta_new[:, 1, 2] = theta[:, 1]
+                theta_new[:, 0, 0] = theta[:, 2]
+                theta_new[:, 1, 1] = theta[:, 3]
+            elif self.stn_mode == 'rotation_translation':
+                angle = theta[:, 0]
+                theta_new[:, 0, 0] = torch.cos(angle)
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle)
+                theta_new[:, 0, 2] = theta[:, 1]
+                theta_new[:, 1, 2] = theta[:, 2]
+            elif self.stn_mode == 'rotation_translation_scale':
+                angle = theta[:, 0]
+                theta_new[:, 0, 0] = torch.cos(angle) * theta[:, 3]
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle) * theta[:, 4]
+                theta_new[:, 0, 2] = theta[:, 1]
+                theta_new[:, 1, 2] = theta[:, 2]
+        
+        return theta_new
+    
+    def forward(self, x):
+        xs = self.localization(x)
+        xs = xs.view(-1, 10 * 3 * 3)
+        theta_g1 = self.fc_localization_global1(xs)
+        theta_g2 = self.fc_localization_global2(xs)
+        theta_l1 = self.fc_localization_local1(xs)
+        theta_l2 = self.fc_localization_local2(xs)
+
+        theta_g1 = self._get_stn_mode_theta(theta_g1, xs)
+        theta_g2 = self._get_stn_mode_theta(theta_g2, xs)
+        theta_l1 = self._get_stn_mode_theta(theta_l1, xs)
+        theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
+                
+        grid = F.affine_grid(theta_g1, size=[224, 224])
+        g1 = F.grid_sample(x, grid)
+
+        grid = F.affine_grid(theta_g2, size=[224, 224])
+        g2 = F.grid_sample(x, grid)
+
+        grid = F.affine_grid(theta_l1, size=[96, 96])
+        l1 = F.grid_sample(x, grid)
+
+        grid = F.affine_grid(theta_l2, size=[96, 96])
+        l2 = F.grid_sample(x, grid)
+        
+        return [g1, g2, l1, l2]
+        
+    
+class AugmentationNetwork(nn.Module):
+    def __init__(self, backbone=STN()):
+        super().__init__()
+        print("Initializing Augmentation Network")
+        self.backbone = backbone
+
+        self.normalize = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                ]
+            )
+
+        self.modules_g1 = transforms.Compose(
+            [
+                transforms.ToPILImage(),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                utils.GaussianBlur(1.0),
+                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
+                self.normalize,
+                ]
+            )
+
+        self.modules_g2 = transforms.Compose(
+            [
+                transforms.ToPILImage(),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                utils.GaussianBlur(1.0),
+                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
+                utils.Solarization(0.2),
+                # transforms.RandomSolarize(threshold=128, p=0.2),
+                # kornia.augmentation.RandomSolarize(p=0.2),
+                self.normalize,
+                ]
+            )
+
+        self.modules_l = transforms.Compose(
+            [
+                transforms.ToPILImage(),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                utils.GaussianBlur(0.5),
+                # transforms.RandomApply(transforms.GaussianBlur(kernel_size=5), p=0.5),
+                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.5),
+                self.normalize,
+                ]
+            )
+
+    def forward(self, imgs):
+        global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
+        # since we have list of images with varying resolution, we need to transform them individually
+        # additionally, transforms.Compose still does not support processing batches :(
+        for img in imgs:
+            img = torch.unsqueeze(img, 0)
+            # emb = grad_reverse(emb)
+            global_local_views = self.backbone(img)
+            # img = torch.squeeze(img, 0)
+            g1_augmented = self.modules_g1(global_local_views[0])
+            g2_augmented = self.modules_g2(global_local_views[1])
+            l1_augmented = self.modules_l(global_local_views[2])
+            l2_augmented = self.modules_l(global_local_views[3])
+
+            global_views1_augmented.append(g1_augmented)
+            global_views2_augmented.append(g2_augmented)
+            local_views1_augmented.append(l1_augmented)
+            local_views2_augmented.append(l2_augmented)
+            
+        global_views1 = torch.stack(global_views1_augmented, 0).cuda()
+        global_views2 = torch.stack(global_views2_augmented, 0).cuda()
+        local_views1 = torch.stack(local_views1_augmented, 0).cuda()
+        local_views2 = torch.stack(local_views2_augmented, 0).cuda()
+
+        return [global_views1, global_views2, local_views1, local_views2]
+        
+        
 class RPN(nn.Module):
-    def __init__(self, backbone=ResNetRPN('resnet18')):
+    def __init__(self, backbone=ResNetRPN("resnet-18")):
         super().__init__()
         print("Initializing RPN")
         self.backbone = backbone

@@ -341,12 +341,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
     
-    lst = params_groups[0]['params']
-    lst = lst + list(rpn.parameters())
-    params_groups[0]['params'] = lst
-    # rpn_params = utils.get_params_groups(student)
-    # rpn_params = list(rpn.parameters())
-    # params_groups.append(rpn_params)
+    student_params = params_groups[0]['params']
+    all_params = student_params + list(rpn.parameters())
+    params_groups[0]['params'] = all_params
 
     # for name, param in rpn.named_parameters():
     #     if param.requires_grad:
