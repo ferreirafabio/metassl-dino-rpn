@@ -346,10 +346,6 @@ class RPN(nn.Module):
         self.global2_fc = nn.Linear(256, 2)
         self.local1_fc = nn.Linear(256, 2)
         self.local2_fc = nn.Linear(256, 2)
-
-        for name, param in self.backbone.named_parameters():
-            if param.requires_grad:
-                print(name)
         
         self.normalize = transforms.Compose([
             transforms.ToTensor(),

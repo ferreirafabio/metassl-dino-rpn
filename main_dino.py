@@ -550,8 +550,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
-            
-            
+
+            print(rpn.module.transform_net.localization_net.backbone.fc.weight)
             print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
             
             optimizer.step()
@@ -579,6 +579,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
                 
             # print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
+            print(rpn.module.transform_net.localization_net.backbone.fc.weight)
             print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
