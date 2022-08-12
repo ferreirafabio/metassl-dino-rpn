@@ -241,6 +241,7 @@ class STN(nn.Module):
         xs = self.localization(x)
         print("----------------------", xs.size())
         xs = xs.view(-1, 10 * 3 * 3)
+        print("----------------------", xs.size())
         theta_g1 = self.fc_localization_global1(xs)
         theta_g2 = self.fc_localization_global2(xs)
         theta_l1 = self.fc_localization_local1(xs)
@@ -252,10 +253,10 @@ class STN(nn.Module):
         theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
         
         print("-----------------------------------", theta_g1.size())
-        grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
+        grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [32, 32])
         g1 = F.grid_sample(x, grid)
 
-        grid = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [224, 224])
+        grid = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [32, 32])
         g2 = F.grid_sample(x, grid)
 
         grid = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [96, 96])
