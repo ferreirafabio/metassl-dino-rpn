@@ -90,16 +90,7 @@ class STN(nn.Module):
         self.localization_dim = localization_dim
         
         # Spatial transformer localization-network
-        self.localization = ResNetRPN("resnet-18", out_dim=localization_dim)
-            
-            # nn.Sequential(
-            # nn.Conv2d(3, 8, kernel_size=7),
-            # nn.MaxPool2d(2, stride=2),
-            # nn.ReLU(True),
-            # nn.Conv2d(8, 10, kernel_size=5),
-            # nn.MaxPool2d(2, stride=2),
-            # nn.ReLU(True)
-            # )
+        self.localization = ResNetRPN("resnet18", out_dim=localization_dim)
         
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = nn.Sequential(
