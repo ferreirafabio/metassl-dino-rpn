@@ -569,6 +569,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # rpn.requires_grad_(False)
             # student.requires_grad_(True)
             # teacher.requires_grad_(True)
+            rpn.requires_grad_(True)
             
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
@@ -577,8 +578,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            # print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
-            print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                
+            print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
+            # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
             #     if param.requires_grad:
