@@ -69,7 +69,7 @@ class ResNetRPN(nn.Module):
         if backbone_path:
             backbone.load_state_dict(torch.load(backbone_path))
 
-        backbone.fc = nn.Linear(256, out_dim)
+        backbone.fc = nn.Linear(512, out_dim)
         torch.nn.init.xavier_uniform_(backbone.fc.weight)
         self.backbone = backbone
 
