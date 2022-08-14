@@ -370,15 +370,15 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
         if args.use_rpn_optimizer:
-            rpn_optimizer = torch.optim.AdamW(list(rpn.parameters())) # lr is set by scheduler
+            rpn_optimizer = torch.optim.AdamW(list(rpn.parameters()))  # lr is set by scheduler
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
         if args.use_rpn_optimizer:
-            rpn_optimizer = torch.optim.SGD(list(rpn.parameters()), lr=0) # lr is set by scheduler
+            rpn_optimizer = torch.optim.SGD(list(rpn.parameters()), lr=0)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
         if args.use_rpn_optimizer:
-            rpn_optimizer = torch.optim.LARS(list(rpn.parameters())) # lr is set by scheduler
+            rpn_optimizer = torch.optim.LARS(list(rpn.parameters()))  # lr is set by scheduler
         
     
     # for mixed precision training
@@ -399,6 +399,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         args.epochs, len(data_loader),
     )
     
+    rpn_lr_schedule = None
     if rpn_optimizer:
         rpn_lr_schedule = utils.cosine_scheduler(
             1e-2 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
@@ -406,8 +407,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             args.epochs, len(data_loader),
             warmup_epochs=0,  # don't warmup RPN
             )
-    else:
-        rpn_lr_schedule = None
     
     # momentum parameter is increased to 1. during training with a cosine schedule
     momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
@@ -535,7 +534,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
-                    optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,epoch,
+                    optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
                     fp16_scaler, rpn, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
@@ -548,7 +547,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
                 
-        if args.use_rpn_optimizer and rpn_optimizer and rpn_lr_schedule:
+        if args.use_rpn_optimizer:
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
             
