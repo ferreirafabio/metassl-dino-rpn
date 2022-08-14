@@ -319,8 +319,8 @@ class AugmentationNetwork(nn.Module):
 
     def forward(self, imgs):
         global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
+        
         # since we have list of images with varying resolution, we need to transform them individually
-        # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
             img = torch.unsqueeze(img, 0)
         

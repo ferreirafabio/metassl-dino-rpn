@@ -142,8 +142,9 @@ def get_args_parser():
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
     
-    #  RPN
+    # RPN
     parser.add_argument("--invert_rpn_gradients", action="store_true", help="Set this flag to invert the gradients used to learn the RPN")
+    parser.add_argument("--use_rpn_optimizer", action="store_true", help="Set this flag to use a separate AdamW optimizer for the RPN parameters; annealed with cosine")
     
     return parser
 
@@ -346,11 +347,16 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
     
-    # student_params = params_groups[0]['params']
-    student_params = params_groups[1]['params']
-    all_params = student_params + list(rpn.parameters())
-    params_groups[1]['params'] = all_params
-    # params_groups[0]['params'] = all_params
+    rpn_optimizer = None
+    if not args.use_rpn_optimizer:
+        # student_params = params_groups[0]['params']
+        student_params = params_groups[1]['params']
+        all_params = student_params + list(rpn.parameters())
+        params_groups[1]['params'] = all_params
+        # params_groups[0]['params'] = all_params
+    else:
+        rpn_optimizer = torch.optim.AdamW(list(rpn.parameters()), lr=1e-3)
+        
     
     # print(list(rpn.parameters()))
     # for name, param in rpn.named_parameters():
@@ -368,7 +374,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
         
-    # rpn_optimizer = torch.optim.AdamW(rpn.parameters())
     
     # for mixed precision training
     fp16_scaler = None
@@ -387,6 +392,17 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         args.weight_decay_end,
         args.epochs, len(data_loader),
     )
+    
+    if rpn_optimizer:
+        rpn_lr_schedule = utils.cosine_scheduler(
+            1e-3 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+            args.min_lr,
+            args.epochs, len(data_loader),
+            warmup_epochs=args.warmup_epochs,
+            )
+    else:
+        rpn_lr_schedule = None
+    
     # momentum parameter is increased to 1. during training with a cosine schedule
     momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
                                                args.epochs, len(data_loader))
@@ -429,7 +445,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             data_loader.sampler.set_epoch(epoch)
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
-                data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
+                data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,
                 epoch, fp16_scaler, rpn, args)
     
             # ============ writing logs ... ============
@@ -513,7 +529,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
-                    optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
+                    optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,epoch,
                     fp16_scaler, rpn, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
@@ -525,6 +541,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             param_group["lr"] = lr_schedule[it]
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
+                
+        if args.use_rpn_optimizer and rpn_optimizer and rpn_lr_schedule:
+            for i, param_group in enumerate(rpn_optimizer.param_groups):
+                param_group["lr"] = rpn_lr_schedule[it]
+            
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
