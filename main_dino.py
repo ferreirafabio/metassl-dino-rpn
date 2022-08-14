@@ -566,17 +566,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
-
-        # rpn_optimizer.zero_grad()
+    
+        if args.use_rpn_optimizer:
+            rpn_optimizer.zero_grad()
     
         # student update
         optimizer.zero_grad()
         param_norms = None
+        
         if fp16_scaler is None:
-            # rpn.requires_grad_(False)
-            # student.requires_grad_(True)
-            # teacher.requires_grad_(True)
-            
+
             loss.backward()
             if args.clip_grad:
                 param_norms = utils.clip_gradients(student, args.clip_grad)
@@ -586,31 +585,20 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             print(rpn.module.transform_net.localization_net.backbone.fc.weight)
             print("--------------------------------------------------------")
             print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
-            
+
             optimizer.step()
             
-            # RPN
-            # optimizer.zero_grad()
-            # rpn.requires_grad_(True)
-            # student.requires_grad_(False)
-            # teacher.requires_grad_(False)
-    
-            # (-loss).backward()
-            # rpn_optimizer.step()
-        else:
-            # rpn.requires_grad_(False)
-            # student.requires_grad_(True)
-            # teacher.requires_grad_(True)
+            if args.use_rpn_optimizer:
+                rpn_optimizer.step()
             
+        else:
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
                 fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
-
                 
-            # print(student.module.backbone.blocks[1].mlp.fc1.weight.grad)
             print(rpn.module.transform_net.localization_net.backbone.fc.weight)
             print("--------------------------------------------------------")
             print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
@@ -620,16 +608,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             #         print(name)
                     
             fp16_scaler.step(optimizer)
-            fp16_scaler.update()
             
-            # RPN
-            # optimizer.zero_grad()
-            # rpn.requires_grad_(True)
-            # student.requires_grad_(False)
-            # teacher.requires_grad_(False)
-    
-            # fp16_scaler.scale(-loss).backward()
-            # fp16_scaler.step(rpn_optimizer)
+            if args.use_rpn_optimizer:
+                fp16_scaler.step(rpn_optimizer)
+                
+            fp16_scaler.update()
         
         # EMA update for the teacher
         with torch.no_grad():
