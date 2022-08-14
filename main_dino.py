@@ -402,7 +402,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     rpn_lr_schedule = None
     if rpn_optimizer:
         rpn_lr_schedule = utils.cosine_scheduler(
-            1e-2 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+            1e-3 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
             warmup_epochs=0,  # don't warmup RPN
@@ -582,9 +582,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-            print("--------------------------------------------------------")
-            print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+            if it % 50 == 0:
+                print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                print("--------------------------------------------------------")
+                print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
 
             optimizer.step()
             
@@ -599,9 +600,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
                 
-            print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-            print("--------------------------------------------------------")
-            print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+            if it % 50 == 0:
+                print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                print("--------------------------------------------------------")
+                print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
             #     if param.requires_grad:
