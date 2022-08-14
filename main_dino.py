@@ -141,6 +141,10 @@ def get_args_parser():
     parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
+    
+    #  RPN
+    parser.add_argument("--invert_rpn_gradients", action="store_true", help="Set this flag to invert the gradients used to learn the RPN")
+    
     return parser
 
 

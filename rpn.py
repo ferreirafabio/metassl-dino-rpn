@@ -22,6 +22,7 @@ import utils
 import kornia
 
 
+# needed for the spatial transformer net
 N_PARAMS = {
         'affine': 6,
         'translation': 2,
@@ -54,8 +55,11 @@ def grad_reverse(x, scale=1.0):
 
 
 class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet50', backbone_path=None, out_dim=256):
+    def __init__(self, backbone='resnet50', backbone_path=None, out_dim=256, invert_rpn_gradients=False):
         super().__init__()
+        
+        self.invert_rpn_gradients = invert_rpn_gradients
+        
         if backbone == 'resnet18':
             backbone = resnet18(pretrained=not backbone_path)
         elif backbone == 'resnet34':
@@ -74,7 +78,9 @@ class ResNetRPN(nn.Module):
         self.backbone = backbone
 
     def forward(self, x):
-        x = grad_reverse(x)
+        if self.invert_rpn_gradients:
+            x = grad_reverse(x)
+            
         x = self.backbone(x)
         return x
 
@@ -83,14 +89,15 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, stn_mode='affine', localization_dim=256):
+    def __init__(self, stn_mode='affine', localization_dim=256, invert_rpn_gradients=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
         self.localization_dim = localization_dim
+        self.invert_rpn_gradients = invert_rpn_gradients
         
         # Spatial transformer localization-network
-        self.localization_net = ResNetRPN("resnet18", out_dim=localization_dim)
+        self.localization_net = ResNetRPN("resnet18", out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
         
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = nn.Sequential(
@@ -228,7 +235,10 @@ class STN(nn.Module):
     
     def forward(self, x):
         xs = self.localization_net(x)
-        x = grad_reverse(x)
+        
+        if self.invert_rpn_gradients:
+            x = grad_reverse(x)
+        
         theta_g1 = self.fc_localization_global1(xs)
         theta_g2 = self.fc_localization_global2(xs)
         theta_l1 = self.fc_localization_local1(xs)
@@ -313,7 +323,10 @@ class AugmentationNetwork(nn.Module):
         # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
             img = torch.unsqueeze(img, 0)
-            img = grad_reverse(img)
+        
+            if self.transform_net.invert_rpn_gradients:
+                img = grad_reverse(img)
+        
             global_local_views = self.transform_net(img)
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
@@ -342,6 +355,7 @@ class RPN(nn.Module):
         super().__init__()
         print("Initializing RPN")
         self.backbone = backbone
+        
         self.global1_fc = nn.Linear(256, 2)
         self.global2_fc = nn.Linear(256, 2)
         self.local1_fc = nn.Linear(256, 2)
@@ -400,7 +414,10 @@ class RPN(nn.Module):
         for img in imgs:
             img = torch.unsqueeze(img, 0)
             emb = self.backbone(img)
-            emb = grad_reverse(emb)
+            
+            if self.invert_rpn_gradients:
+                emb = grad_reverse(emb)
+                
             g_view1 = self.global1_fc(emb)
             g_view2 = self.global2_fc(emb)
             l_view1 = self.local1_fc(emb)
