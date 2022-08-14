@@ -144,7 +144,8 @@ def get_args_parser():
     
     # RPN
     parser.add_argument("--invert_rpn_gradients", action="store_true", help="Set this flag to invert the gradients used to learn the RPN")
-    parser.add_argument("--use_rpn_optimizer", action="store_true", help="Set this flag to use a separate AdamW optimizer for the RPN parameters; annealed with cosine")
+    parser.add_argument("--use_rpn_optimizer", action="store_true", help="Set this flag to use a separate optimizer for the RPN parameters; "
+                                                                         "annealed with cosine and no warmup")
     
     return parser
 
@@ -347,32 +348,37 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
     
-    rpn_optimizer = None
     if not args.use_rpn_optimizer:
+        # add to regularized param group
         # student_params = params_groups[0]['params']
+        # all_params = student_params + list(rpn.parameters())
+        # params_groups[0]['params'] = all_params
+        
+        # do not use regularization of RPN params
         student_params = params_groups[1]['params']
         all_params = student_params + list(rpn.parameters())
         params_groups[1]['params'] = all_params
-        # params_groups[0]['params'] = all_params
-    else:
-        rpn_optimizer = torch.optim.AdamW(list(rpn.parameters()), lr=1e-3)
         
-    
     # print(list(rpn.parameters()))
     # for name, param in rpn.named_parameters():
     #     if param.requires_grad:
     #         print(name)
     
-    # for p in params_groups:
-    #     for k, v in p.items():
-    #         print(k, v)
+    
+    rpn_optimizer = None
     
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
+        if args.use_rpn_optimizer:
+            rpn_optimizer = torch.optim.AdamW(list(rpn.parameters())) # lr is set by scheduler
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
+        if args.use_rpn_optimizer:
+            rpn_optimizer = torch.optim.SGD(list(rpn.parameters()), lr=0) # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
+        if args.use_rpn_optimizer:
+            rpn_optimizer = torch.optim.LARS(list(rpn.parameters())) # lr is set by scheduler
         
     
     # for mixed precision training
@@ -395,10 +401,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     
     if rpn_optimizer:
         rpn_lr_schedule = utils.cosine_scheduler(
-            1e-3 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+            1e-2 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
-            warmup_epochs=args.warmup_epochs,
+            warmup_epochs=0,  # don't warmup RPN
             )
     else:
         rpn_lr_schedule = None
