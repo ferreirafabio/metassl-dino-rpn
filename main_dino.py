@@ -593,13 +593,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 rpn_optimizer.step()
 
             # prints currently alive Tensors and Variables
-            import gc
-            for obj in gc.get_objects():
-                try:
-                    if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                        print(type(obj), obj.size())
-                except:
-                    pass
+            # import gc
+            # for obj in gc.get_objects():
+            #     try:
+            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            #             print(type(obj), obj.size())
+            #     except:
+            #         pass
         else:
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
@@ -625,13 +625,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             fp16_scaler.update()
 
             # prints currently alive Tensors and Variables
-            import gc
-            for obj in gc.get_objects():
-                try:
-                    if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                        print(type(obj), obj.size())
-                except:
-                    pass
+            # import gc
+            # for obj in gc.get_objects():
+            #     try:
+            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            #             print(type(obj), obj.size())
+            #     except:
+            #         pass
         
         # EMA update for the teacher
         with torch.no_grad():
@@ -639,6 +639,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
 
+        # prevent memory leak
+        del images
+        
         # logging
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
