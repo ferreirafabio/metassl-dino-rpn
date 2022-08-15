@@ -22,7 +22,7 @@ from torchvision import transforms
 import utils
 import kornia
 
-from torchsummary import summary
+# from torchsummary import summary
 
 
 # needed for the spatial transformer net
@@ -68,7 +68,7 @@ class ResNetRPN(nn.Module):
             # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet9':
             backbone = resnet9(pretrained=False)
-            summary(backbone.cuda(), (3, 224, 224))
+            # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet34':
             backbone = resnet34(pretrained=not backbone_path)
         elif backbone == 'resnet50':
