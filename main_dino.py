@@ -593,7 +593,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 rpn_optimizer.step()
 
             # prints currently alive Tensors and Variables
-            import torch
             import gc
             for obj in gc.get_objects():
                 try:
