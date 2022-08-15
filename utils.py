@@ -32,7 +32,8 @@ from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 
-from torchvision.models.resnet import _resnet, BasicBlock
+from torchvision.models.resnet import _resnet, BasicBlock, ResNet
+from typing import Any
 
 
 class GaussianBlur(nn.Module):
