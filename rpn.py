@@ -58,27 +58,27 @@ def grad_reverse(x, scale=1.0):
 
 
 class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet50', backbone_path=None, out_dim=256, invert_rpn_gradients=False):
+    def __init__(self, backbone='resnet50', out_dim=256, invert_rpn_gradients=False):
         super().__init__()
         
         self.invert_rpn_gradients = invert_rpn_gradients
         
         if backbone == 'resnet18':
-            backbone = resnet18(pretrained=not backbone_path)
+            backbone = resnet18(pretrained=False)
             # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet9':
-            backbone = resnet9(pretrained=not backbone_path)
+            backbone = resnet9(pretrained=False)
             # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet34':
-            backbone = resnet34(pretrained=not backbone_path)
+            backbone = resnet34(pretrained=False)
         elif backbone == 'resnet50':
-            backbone = resnet50(pretrained=not backbone_path)
+            backbone = resnet50(pretrained=False)
         elif backbone == 'resnet101':
-            backbone = resnet101(pretrained=not backbone_path)
+            backbone = resnet101(pretrained=False)
         else:  # backbone == 'resnet152':
-            backbone = resnet152(pretrained=not backbone_path)
-        if backbone_path:
-            backbone.load_state_dict(torch.load(backbone_path))
+            backbone = resnet152(pretrained=False)
+        # if backbone_path:
+        #     backbone.load_state_dict(torch.load(backbone_path))
 
         backbone.fc = nn.Linear(512, out_dim)
         torch.nn.init.xavier_uniform_(backbone.fc.weight)
