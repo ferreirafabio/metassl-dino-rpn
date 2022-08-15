@@ -67,7 +67,7 @@ class ResNetRPN(nn.Module):
             backbone = resnet18(pretrained=not backbone_path)
             # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet9':
-            backbone = resnet9(pretrained=False)
+            backbone = resnet9(pretrained=not backbone_path)
             # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet34':
             backbone = resnet34(pretrained=not backbone_path)
