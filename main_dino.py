@@ -582,7 +582,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            if it % 50 == 0:
+            if it % 500 == 0:
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
@@ -600,7 +600,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
                 
-            if it % 50 == 0:
+            if it % 500 == 0:
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
