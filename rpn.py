@@ -104,7 +104,7 @@ class STN(nn.Module):
         self.invert_rpn_gradients = invert_rpn_gradients
         
         # Spatial transformer localization-network
-        self.localization_net = ResNetRPN("resnet18", out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
+        self.localization_net = ResNetRPN("resnet9", out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
         
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = nn.Sequential(
