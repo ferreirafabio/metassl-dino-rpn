@@ -339,6 +339,10 @@ class AugmentationNetwork(nn.Module):
             g2_augmented = torch.squeeze(global_local_views[1], 0)
             l1_augmented = torch.squeeze(global_local_views[2], 0)
             l2_augmented = torch.squeeze(global_local_views[3], 0)
+            # g1_augmented = self.modules_g1(torch.squeeze(global_local_views[0], 0))
+            # g2_augmented = self.modules_g2(torch.squeeze(global_local_views[1], 0))
+            # l1_augmented = self.modules_l(torch.squeeze(global_local_views[2], 0))
+            # l2_augmented = self.modules_l(torch.squeeze(global_local_views[3], 0))
 
             global_views1_augmented.append(g1_augmented)
             global_views2_augmented.append(g2_augmented)

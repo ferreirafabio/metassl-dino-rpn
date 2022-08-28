@@ -649,7 +649,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # prevent memory leak
         # images = [im.detach() for im in images]
-        del images
+        # del images
         
         # logging
         torch.cuda.synchronize()
