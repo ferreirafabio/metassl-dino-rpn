@@ -600,14 +600,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if args.use_rpn_optimizer:
                 rpn_optimizer.step()
 
-            # prints currently alive Tensors and Variables
-            # import gc
-            # for obj in gc.get_objects():
-            #     try:
-            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-            #             print(type(obj), obj.size())
-            #     except:
-            #         pass
         else:
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
