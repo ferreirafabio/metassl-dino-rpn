@@ -43,6 +43,8 @@ from functools import partial
 from rpn import AugmentationNetwork
 from rpn import STN
 
+from torch.profiler import profile, ProfilerActivity
+
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(torchvision_models.__dict__[name]))
@@ -555,13 +557,19 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
+        with profile(
+            activities=[ProfilerActivity.CPU],
+            profile_memory=True, record_shapes=True
+            ) as prof:
         
-        # teacher and student forward passes + compute dino loss
-        with torch.cuda.amp.autocast(fp16_scaler is not None):
-            images = rpn(images)
-            teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
-            student_output = student(images)
-            loss = dino_loss(student_output, teacher_output, epoch)
+            # teacher and student forward passes + compute dino loss
+            with torch.cuda.amp.autocast(fp16_scaler is not None):
+                images = rpn(images)
+                teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
+                student_output = student(images)
+                loss = dino_loss(student_output, teacher_output, epoch)
+                
+            print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
@@ -632,6 +640,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             #             print(type(obj), obj.size())
             #     except:
             #         pass
+
         
         # EMA update for the teacher
         with torch.no_grad():
