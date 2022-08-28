@@ -43,8 +43,6 @@ from functools import partial
 from rpn import AugmentationNetwork
 from rpn import STN
 
-from torch.profiler import profile, ProfilerActivity
-
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(torchvision_models.__dict__[name]))
@@ -541,119 +539,123 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
-    with profile(activities=[ProfilerActivity.CPU], profile_memory=True, record_shapes=True) as prof:
+    print(f"CUDA MAX MEM: {torch.cuda.max_memory_allocated()}")
+    print(f"CUDA MEM ALLOCATED: {torch.cuda.memory_allocated()}")
     
-        for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
-            # update weight decay and learning rate according to their schedule
-            it = len(data_loader) * epoch + it  # global training iteration
-            for i, param_group in enumerate(optimizer.param_groups):
-                param_group["lr"] = lr_schedule[it]
-                if i == 0:  # only the first group is regularized
-                    param_group["weight_decay"] = wd_schedule[it]
-                    
-            if args.use_rpn_optimizer:
-                for i, param_group in enumerate(rpn_optimizer.param_groups):
-                    param_group["lr"] = rpn_lr_schedule[it]
-    
-            # move images to gpu
-            images = [im.cuda(non_blocking=True) for im in images]
-            # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
-        
-            # teacher and student forward passes + compute dino loss
-            with torch.cuda.amp.autocast(fp16_scaler is not None):
-                images = rpn(images)
-                teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
-                student_output = student(images)
-                loss = dino_loss(student_output, teacher_output, epoch)
-    
-            if not math.isfinite(loss.item()):
-                print("Loss is {}, stopping training".format(loss.item()), force=True)
-                raise ValueError("Loss value is invalid.")
-        
-            if args.use_rpn_optimizer:
-                rpn_optimizer.zero_grad()
-        
-            # student update
-            optimizer.zero_grad()
-            param_norms = None
-            
-            if fp16_scaler is None:
-    
-                loss.backward()
-                if args.clip_grad:
-                    param_norms = utils.clip_gradients(student, args.clip_grad)
-                utils.cancel_gradients_last_layer(epoch, student,
-                                                  args.freeze_last_layer)
-    
-                # if it % 500 == 0:
-                #     print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-                #     print("--------------------------------------------------------")
-                #     print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
-    
-                optimizer.step()
+    for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
+        # update weight decay and learning rate according to their schedule
+        it = len(data_loader) * epoch + it  # global training iteration
+        for i, param_group in enumerate(optimizer.param_groups):
+            param_group["lr"] = lr_schedule[it]
+            if i == 0:  # only the first group is regularized
+                param_group["weight_decay"] = wd_schedule[it]
                 
-                if args.use_rpn_optimizer:
-                    rpn_optimizer.step()
-    
-                # prints currently alive Tensors and Variables
-                # import gc
-                # for obj in gc.get_objects():
-                #     try:
-                #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                #             print(type(obj), obj.size())
-                #     except:
-                #         pass
-            else:
-                fp16_scaler.scale(loss).backward()
-                if args.clip_grad:
-                    fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
-                    param_norms = utils.clip_gradients(student, args.clip_grad)
-                utils.cancel_gradients_last_layer(epoch, student,
-                                                  args.freeze_last_layer)
-                    
-                # if it % 500 == 0:
-                #     print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-                #     print("--------------------------------------------------------")
-                #     print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
-                
-                # for name, param in rpn.module.backbone.localization.named_parameters():
-                #     if param.requires_grad:
-                #         print(name)
-                
-                fp16_scaler.step(optimizer)
-                
-                if args.use_rpn_optimizer:
-                    fp16_scaler.step(rpn_optimizer)
-                    
-                fp16_scaler.update()
-    
-                # prints currently alive Tensors and Variables
-                # import gc
-                # for obj in gc.get_objects():
-                #     try:
-                #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                #             print(type(obj), obj.size())
-                #     except:
-                #         pass
-    
-            
-            # EMA update for the teacher
-            with torch.no_grad():
-                m = momentum_schedule[it]  # momentum parameter
-                for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
-                    param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-    
-            # prevent memory leak
-            del images
-            
-            # logging
-            torch.cuda.synchronize()
-            metric_logger.update(loss=loss.item())
-            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-            metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
+        if args.use_rpn_optimizer:
+            for i, param_group in enumerate(rpn_optimizer.param_groups):
+                param_group["lr"] = rpn_lr_schedule[it]
 
-            print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
+        print(f"CUDA MAX MEM: {torch.cuda.max_memory_allocated()}")
+        print(f"CUDA MEM ALLOCATED: {torch.cuda.memory_allocated()}")
+        continue
+        
+        # move images to gpu
+        images = [im.cuda(non_blocking=True) for im in images]
+        # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
+    
+        
+        # teacher and student forward passes + compute dino loss
+        with torch.cuda.amp.autocast(fp16_scaler is not None):
+            images = rpn(images)
+            teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
+            student_output = student(images)
+            loss = dino_loss(student_output, teacher_output, epoch)
+
+        if not math.isfinite(loss.item()):
+            print("Loss is {}, stopping training".format(loss.item()), force=True)
+            raise ValueError("Loss value is invalid.")
+    
+        if args.use_rpn_optimizer:
+            rpn_optimizer.zero_grad()
+    
+        # student update
+        optimizer.zero_grad()
+        param_norms = None
+        
+        if fp16_scaler is None:
+
+            loss.backward()
+            if args.clip_grad:
+                param_norms = utils.clip_gradients(student, args.clip_grad)
+            utils.cancel_gradients_last_layer(epoch, student,
+                                              args.freeze_last_layer)
+
+            # if it % 500 == 0:
+            #     print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+            #     print("--------------------------------------------------------")
+            #     print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+
+            optimizer.step()
             
+            if args.use_rpn_optimizer:
+                rpn_optimizer.step()
+
+            # prints currently alive Tensors and Variables
+            # import gc
+            # for obj in gc.get_objects():
+            #     try:
+            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            #             print(type(obj), obj.size())
+            #     except:
+            #         pass
+        else:
+            fp16_scaler.scale(loss).backward()
+            if args.clip_grad:
+                fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
+                param_norms = utils.clip_gradients(student, args.clip_grad)
+            utils.cancel_gradients_last_layer(epoch, student,
+                                              args.freeze_last_layer)
+                
+            # if it % 500 == 0:
+            #     print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+            #     print("--------------------------------------------------------")
+            #     print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+            
+            # for name, param in rpn.module.backbone.localization.named_parameters():
+            #     if param.requires_grad:
+            #         print(name)
+            
+            fp16_scaler.step(optimizer)
+            
+            if args.use_rpn_optimizer:
+                fp16_scaler.step(rpn_optimizer)
+                
+            fp16_scaler.update()
+
+            # prints currently alive Tensors and Variables
+            # import gc
+            # for obj in gc.get_objects():
+            #     try:
+            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            #             print(type(obj), obj.size())
+            #     except:
+            #         pass
+
+        # EMA update for the teacher
+        with torch.no_grad():
+            m = momentum_schedule[it]  # momentum parameter
+            for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
+                param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
+
+        # prevent memory leak
+        # images = [im.detach() for im in images]
+        # del images
+        
+        # logging
+        torch.cuda.synchronize()
+        metric_logger.update(loss=loss.item())
+        metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+        metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
+    
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
