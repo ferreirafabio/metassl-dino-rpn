@@ -339,10 +339,6 @@ class AugmentationNetwork(nn.Module):
             g2_augmented = torch.squeeze(global_local_views[1], 0)
             l1_augmented = torch.squeeze(global_local_views[2], 0)
             l2_augmented = torch.squeeze(global_local_views[3], 0)
-            # g1_augmented = self.modules_g1(torch.squeeze(global_local_views[0], 0))
-            # g2_augmented = self.modules_g2(torch.squeeze(global_local_views[1], 0))
-            # l1_augmented = self.modules_l(torch.squeeze(global_local_views[2], 0))
-            # l2_augmented = self.modules_l(torch.squeeze(global_local_views[3], 0))
 
             global_views1_augmented.append(g1_augmented)
             global_views2_augmented.append(g2_augmented)
@@ -353,6 +349,11 @@ class AugmentationNetwork(nn.Module):
         global_views2 = torch.stack(global_views2_augmented, 0).cuda()
         local_views1 = torch.stack(local_views1_augmented, 0).cuda()
         local_views2 = torch.stack(local_views2_augmented, 0).cuda()
+
+        del global_views1_augmented
+        del global_views2_augmented
+        del local_views1_augmented
+        del local_views2_augmented
 
         return [global_views1, global_views2, local_views1, local_views2]
         
