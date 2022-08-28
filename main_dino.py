@@ -539,8 +539,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
-    # print(f"CUDA MAX MEM: {torch.cuda.max_memory_allocated()}")
-    # print(f"CUDA MEM ALLOCATED: {torch.cuda.memory_allocated()}")
+    print(f"CUDA MAX MEM: {torch.cuda.max_memory_allocated()}")
+    print(f"CUDA MEM ALLOCATED: {torch.cuda.memory_allocated()}")
     
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
@@ -554,8 +554,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
 
-        # print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-        # print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
+        print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+        print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
