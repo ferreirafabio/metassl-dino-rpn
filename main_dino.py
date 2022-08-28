@@ -557,16 +557,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
         print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
-        
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
-        continue
-        
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
+
+            continue
+            
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
