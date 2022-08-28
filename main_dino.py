@@ -552,15 +552,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if args.use_rpn_optimizer:
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
-            
 
-        # move images to gpu
-        images = [im.cuda(non_blocking=True) for im in images]
-        # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
-        with profile(
-            activities=[ProfilerActivity.CPU],
-            profile_memory=True, record_shapes=True
-            ) as prof:
+        with profile(activities=[ProfilerActivity.CPU], profile_memory=True, record_shapes=True) as prof:
+            # move images to gpu
+            images = [im.cuda(non_blocking=True) for im in images]
+            # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
             # teacher and student forward passes + compute dino loss
             with torch.cuda.amp.autocast(fp16_scaler is not None):
