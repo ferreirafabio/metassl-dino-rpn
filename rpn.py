@@ -349,10 +349,15 @@ class AugmentationNetwork(nn.Module):
             local_views1_augmented.append(l1_augmented)
             local_views2_augmented.append(l2_augmented)
             
-        global_views1 = torch.stack(global_views1_augmented, 0).cuda()
-        global_views2 = torch.stack(global_views2_augmented, 0).cuda()
-        local_views1 = torch.stack(local_views1_augmented, 0).cuda()
-        local_views2 = torch.stack(local_views2_augmented, 0).cuda()
+        # global_views1 = torch.stack(global_views1_augmented, 0).cuda()
+        # global_views2 = torch.stack(global_views2_augmented, 0).cuda()
+        # local_views1 = torch.stack(local_views1_augmented, 0).cuda()
+        # local_views2 = torch.stack(local_views2_augmented, 0).cuda()
+
+        global_views1 = torch.stack(global_views1_augmented, 0)
+        global_views2 = torch.stack(global_views2_augmented, 0)
+        local_views1 = torch.stack(local_views1_augmented, 0)
+        local_views2 = torch.stack(local_views2_augmented, 0)
 
         del global_views1_augmented
         del global_views2_augmented
