@@ -311,8 +311,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
     )
     # move networks to gpu
-    # student, teacher, rpn = student.cuda(), teacher.cuda(), rpn.cuda()
-    student, teacher = student.cuda(), teacher.cuda()
+    student, teacher, rpn = student.cuda(), teacher.cuda(), rpn.cuda()
     
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
@@ -642,7 +641,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # prevent memory leak
         # images = [im.detach() for im in images]
-        # del images
+        del images
         
         # logging
         torch.cuda.synchronize()
