@@ -297,7 +297,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         print(f"Unknown architecture: {args.arch}")
 
     rpn = AugmentationNetwork(transform_net=STN(backbone="resnet9", stn_mode="affine"))
-    # rpn = RPN(backbone=ResNetRPN('resnet18'))
     
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
@@ -317,7 +316,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     if utils.has_batchnorms(student):
         student = nn.SyncBatchNorm.convert_sync_batchnorm(student)
         teacher = nn.SyncBatchNorm.convert_sync_batchnorm(teacher)
-        rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
 
         # we need DDP wrapper to have synchro batch norms working...
         teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu])
@@ -326,6 +324,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         # teacher_without_ddp and teacher are the same thing
         teacher_without_ddp = teacher
+        
+    if utils.has_batchnorms(rpn):
+        rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
+        
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
     rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu])
     # teacher and student start with the same weights
@@ -565,7 +567,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
 
-            # continue
+            continue
 
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
