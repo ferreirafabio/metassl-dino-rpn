@@ -96,7 +96,7 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, backbone="resnet9", stn_mode='affine', localization_dim=256, invert_rpn_gradients=False):
+    def __init__(self, backbone="resnet18", stn_mode='affine', localization_dim=256, invert_rpn_gradients=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
