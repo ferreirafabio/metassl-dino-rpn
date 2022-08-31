@@ -254,7 +254,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
     else:
-        sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
+        print("--------------shuffle data deactivated-------------")
+        sampler = torch.utils.data.DistributedSampler(dataset, shuffle=False)
     
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -296,7 +297,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
 
-    rpn = AugmentationNetwork(transform_net=STN(backbone="resnet9", stn_mode="affine"))
+    rpn = AugmentationNetwork(transform_net=STN(backbone="resnet9", stn_mode="affine").cuda())
     
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
@@ -366,7 +367,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #     if param.requires_grad:
     #         print(name)
     
-    
     rpn_optimizer = None
     
     if args.optimizer == "adamw":
@@ -382,7 +382,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         if args.use_rpn_optimizer:
             rpn_optimizer = torch.optim.LARS(list(rpn.parameters()))  # lr is set by scheduler
         
-    
     # for mixed precision training
     fp16_scaler = None
     if args.use_fp16:
@@ -560,6 +559,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
+        images = [print(im.device) for im in images]
         # images = [im.cuda(non_blocking=True) for im in images]
         # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
