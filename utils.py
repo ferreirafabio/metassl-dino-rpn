@@ -32,9 +32,9 @@ from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 
-from torchvision.models.resnet import _resnet, BasicBlock, ResNet
+from torchvision.models import resnet
+from torchvision.models.resnet import BasicBlock, ResNet
 from typing import Any
-
 
 class GaussianBlur(nn.Module):
     """
@@ -874,4 +874,4 @@ def resnet9(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> R
         progress (bool): If True, displays a progress bar of the download to stderr
     """
     assert pretrained == False, "no pre-trained resnet9 model available"
-    return _resnet(arch="resnet9", block=BasicBlock, layers=[2,2,2,2], pretrained=pretrained, progress=progress, **kwargs)
+    return resnet._resnet(arch="resnet9", block=BasicBlock, layers=[1, 1, 1, 1], pretrained=pretrained, progress=progress, **kwargs)
