@@ -875,4 +875,4 @@ def resnet9(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> R
         progress (bool): If True, displays a progress bar of the download to stderr
     """
     assert pretrained == False, "no pre-trained resnet9 model available"
-    return _resnet(arch="resnet9", block=BasicBlock, layers=[1, 1, 1, 1], pretrained=pretrained, progress=progress, **kwargs)
+    return _resnet(arch="resnet18", block=BasicBlock, layers=[1, 1, 1, 1], pretrained=pretrained, progress=progress, **kwargs)
