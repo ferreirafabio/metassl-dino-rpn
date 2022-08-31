@@ -297,7 +297,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
 
-    rpn = AugmentationNetwork(transform_net=STN(backbone="resnet18", stn_mode="affine").cuda())
+    rpn = AugmentationNetwork(transform_net=STN(backbone="resnet9", stn_mode="affine").cuda())
     
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
@@ -539,9 +539,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     fp16_scaler, rpn, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
-
-    print(f"CUDA MAX MEM: {torch.cuda.max_memory_allocated()}")
-    print(f"CUDA MEM ALLOCATED: {torch.cuda.memory_allocated()}")
     
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
@@ -555,11 +552,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
 
-        print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-        print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
+        # print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+        # print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
-        # images = [print(im.device) for im in images]
         # images = [im.cuda(non_blocking=True) for im in images]
         # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
@@ -639,7 +635,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
 
-        # prevent memory leak
         # images = [im.detach() for im in images]
         del images
         
