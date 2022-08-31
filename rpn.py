@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from torchvision.models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models.efficientnet import efficientnet_b0
 from utils import resnet9
 from torchvision.transforms.functional import crop
 from torchvision import transforms
@@ -66,8 +67,9 @@ class ResNetRPN(nn.Module):
         if backbone == 'resnet18':
             backbone = resnet18(pretrained=False)
             # summary(backbone.cuda(), (3, 224, 224))
-        elif backbone == 'resnet9':
-            backbone = resnet9(pretrained=False)
+        elif backbone == 'enb0':
+            backbone = efficientnet_b0(pretrained=False)
+            # backbone = resnet9(pretrained=False)
             # summary(backbone.cuda(), (3, 224, 224))
         elif backbone == 'resnet34':
             backbone = resnet34(pretrained=False)
