@@ -31,8 +31,8 @@ import torch
 from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
-from torchvision.models.resnet import _resnet, BasicBlock, ResNet
-from typing import Any
+from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
+from typing import Any, List, Union, Type
 
 
 class GaussianBlur(nn.Module):
@@ -864,7 +864,15 @@ def custom_collate(batch):
     return [data, target]
 
 
-def resnet9(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> ResNet:
+def _resnet(
+    block: Type[Union[BasicBlock, Bottleneck]],
+    layers: List[int],
+    **kwargs: Any,
+) -> ResNet:
+    model = ResNet(block, layers, **kwargs)
+    return model
+
+def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     r"""ResNet-9 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
 
@@ -873,4 +881,4 @@ def resnet9(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> R
         progress (bool): If True, displays a progress bar of the download to stderr
     """
     assert pretrained == False, "no pre-trained resnet9 model available"
-    return _resnet(arch="resnet9", block=BasicBlock, layers=[1, 1, 1, 1], pretrained=pretrained, progress=progress, **kwargs)
+    return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
