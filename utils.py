@@ -872,6 +872,7 @@ def _resnet(
     model = ResNet(block, layers, **kwargs)
     return model
 
+
 def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     r"""ResNet-9 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
