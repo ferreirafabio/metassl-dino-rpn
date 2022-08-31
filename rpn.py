@@ -58,7 +58,7 @@ def grad_reverse(x, scale=1.0):
 
 
 class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet50', out_dim=256, invert_rpn_gradients=False):
+    def __init__(self, backbone='resnet18', out_dim=256, invert_rpn_gradients=False):
         super().__init__()
         
         self.invert_rpn_gradients = invert_rpn_gradients
