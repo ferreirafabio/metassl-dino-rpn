@@ -524,7 +524,8 @@ def init_distributed_mode(args, rank):
     print('| distributed init (rank {}): {}'.format(
         args.rank, args.dist_url), flush=True)
     dist.barrier()
-    setup_for_distributed(args.rank == 0)
+    # setup_for_distributed(args.rank == 0)
+    print("---------------------deactivated setup_for_distributed for debugging-------------------------")
 
 
 def accuracy(output, target, topk=(1,)):
