@@ -272,7 +272,7 @@ class STN(nn.Module):
         
     
 class AugmentationNetwork(nn.Module):
-    def __init__(self, transform_net=STN(stn_mode="affine")):
+    def __init__(self, transform_net):
         super().__init__()
         print("Initializing Augmentation Network")
         self.transform_net = transform_net

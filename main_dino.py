@@ -296,8 +296,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         embed_dim = student.fc.weight.shape[1]
     else:
         print(f"Unknown architecture: {args.arch}")
-
-    rpn = AugmentationNetwork(transform_net=STN(backbone="resnet9", stn_mode="affine"))
+        
+    transform_net = STN(backbone="resnet9", stn_mode="affine").cuda()
+    rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
