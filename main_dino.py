@@ -297,7 +297,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(backbone="resnet9", stn_mode="affine")
+    transform_net = STN(backbone="resnet18", stn_mode="affine")
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions
