@@ -559,7 +559,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
-        images = [print(im.device) for im in images]
+        # images = [print(im.device) for im in images]
         # images = [im.cuda(non_blocking=True) for im in images]
         # print(f"image shape before fw pass: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
