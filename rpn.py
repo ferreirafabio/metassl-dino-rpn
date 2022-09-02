@@ -332,6 +332,9 @@ class AugmentationNetwork(nn.Module):
         # since we have list of images with varying resolution, we need to transform them individually
         for img in imgs:
             img = torch.unsqueeze(img, 0)
+            
+            if img.size(1) > 800 or img.size(2) > 800:
+                    img = resize(img, size=800, max_size=800)
         
             if self.transform_net.invert_rpn_gradients:
                 img = grad_reverse(img)
@@ -432,9 +435,7 @@ class RPN(nn.Module):
         # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
             img = torch.unsqueeze(img, 0)
-            print(img.size())
-            if img.size(1) > 800 or img.size(2) > 800:
-                    img = resize(img, size=800, max_size=800)
+
             emb = self.backbone(img)
             
             if self.invert_rpn_gradients:
