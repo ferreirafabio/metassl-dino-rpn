@@ -432,7 +432,7 @@ class RPN(nn.Module):
         # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
             img = torch.unsqueeze(img, 0)
-            
+            print(img.size())
             if img.size(1) > 800 or img.size(2) > 800:
                     img = resize(img, size=800, max_size=800)
             emb = self.backbone(img)
