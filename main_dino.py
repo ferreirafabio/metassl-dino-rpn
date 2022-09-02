@@ -235,6 +235,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     # )
     transform = transforms.Compose([
             transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
@@ -558,7 +559,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         
         # move images to gpu
         # images = [im.cuda(non_blocking=True) for im in images]
-        print(f"image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
+        print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):

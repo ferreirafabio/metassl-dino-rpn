@@ -18,7 +18,7 @@ from torch.nn import functional as F
 from torchvision.models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
 from torchvision.models.efficientnet import efficientnet_b0
 from utils import resnet9
-from torchvision.transforms.functional import crop
+from torchvision.transforms.functional import crop, resize
 from torchvision import transforms
 import utils
 import kornia
@@ -432,6 +432,9 @@ class RPN(nn.Module):
         # additionally, transforms.Compose still does not support processing batches :(
         for img in imgs:
             img = torch.unsqueeze(img, 0)
+            
+            if img.size(1) > 800 or img.size(2) > 800:
+                    img = resize(img, size=800, max_size=800)
             emb = self.backbone(img)
             
             if self.invert_rpn_gradients:
