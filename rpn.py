@@ -332,9 +332,11 @@ class AugmentationNetwork(nn.Module):
         # since we have list of images with varying resolution, we need to transform them individually
         for img in imgs:
             img = torch.unsqueeze(img, 0)
-            
-            if img.size(2) > 800 or img.size(3) > 800:
-                    img = resize(img, size=800, max_size=800)
+            try:
+                if img.size(2) > 800 or img.size(3) > 800:
+                        img = resize(img, size=800, max_size=800)
+            except Exception as e:
+                print(e)
         
             if self.transform_net.invert_rpn_gradients:
                 img = grad_reverse(img)
