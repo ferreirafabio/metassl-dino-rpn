@@ -333,7 +333,7 @@ class AugmentationNetwork(nn.Module):
         for img in imgs:
             img = torch.unsqueeze(img, 0)
             
-            if img.size(1) > 800 or img.size(2) > 800:
+            if img.size(2) > 800 or img.size(3) > 800:
                     img = resize(img, size=800, max_size=800)
         
             if self.transform_net.invert_rpn_gradients:
