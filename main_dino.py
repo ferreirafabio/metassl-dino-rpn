@@ -427,6 +427,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             optimizer=optimizer,
             fp16_scaler=fp16_scaler,
             dino_loss=dino_loss,
+            rpn=rpn,
+            rpn_optimizer=rpn_optimizer,
         )
     else:
         utils.restart_from_checkpoint(
@@ -437,6 +439,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             optimizer=optimizer,
             fp16_scaler=fp16_scaler,
             dino_loss=dino_loss,
+            rpn=rpn,
+            rpn_optimizer=rpn_optimizer,
         )
     start_epoch = to_restore["epoch"]
 
@@ -464,6 +468,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                 'epoch': epoch + 1,
                 'args': args,
                 'dino_loss': dino_loss.state_dict(),
+                'rpn': rpn.state_dict(),
+                'rpn_optimizer': rpn_optimizer.state_dict(),
             }
             if fp16_scaler is not None:
                 save_dict['fp16_scaler'] = fp16_scaler.state_dict()
