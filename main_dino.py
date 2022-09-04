@@ -132,7 +132,7 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
-    parser.add_argument('--saveckp_freq', default=5, type=int, help='Save checkpoint every x epochs.')
+    parser.add_argument('--saveckp_freq', default=3, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
@@ -554,8 +554,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
 
-        print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-        print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
+        # print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+        # print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
         # images = [im.cuda(non_blocking=True) for im in images]
@@ -592,6 +592,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
             optimizer.step()
             

@@ -334,7 +334,7 @@ class AugmentationNetwork(nn.Module):
             img = torch.unsqueeze(img, 0)
             try:
                 if img.size(2) > 800 or img.size(3) > 800:
-                        img = resize(img, size=800, max_size=800)
+                        img = resize(img, size=800, max_size=801)
             except Exception as e:
                 print(e)
         
