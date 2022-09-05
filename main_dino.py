@@ -469,7 +469,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                 'args': args,
                 'dino_loss': dino_loss.state_dict(),
                 'rpn': rpn.state_dict(),
-                'rpn_optimizer': rpn_optimizer.state_dict(),
+                'rpn_optimizer': rpn_optimizer.state_dict() if rpn_optimizer else None,
             }
             if fp16_scaler is not None:
                 save_dict['fp16_scaler'] = fp16_scaler.state_dict()
