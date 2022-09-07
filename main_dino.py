@@ -143,8 +143,8 @@ def get_args_parser():
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
     
     # RPN
-    parser.add_argument("--invert_rpn_gradients", action="store_true", help="Set this flag to invert the gradients used to learn the RPN")
-    parser.add_argument("--use_rpn_optimizer", action="store_true", help="Set this flag to use a separate optimizer for the RPN parameters; "
+    parser.add_argument("--invert_rpn_gradients", default=False, type=utils.bool_flag, help="Set this flag to invert the gradients used to learn the RPN")
+    parser.add_argument("--use_rpn_optimizer", default=False, type=utils.bool_flag, help="Set this flag to use a separate optimizer for the RPN parameters; "
                                                                          "annealed with cosine and no warmup")
     
     return parser
