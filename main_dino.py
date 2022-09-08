@@ -298,7 +298,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(backbone="resnet9", stn_mode="affine")
+    transform_net = STN(backbone="resnet18", stn_mode="affine")
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions
@@ -618,6 +618,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
             #     if param.requires_grad:
