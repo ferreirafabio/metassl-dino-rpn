@@ -596,15 +596,15 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             optimizer.step()
             
+            if args.use_rpn_optimizer:
+                rpn_optimizer.step()
+
             if it % 500 == 0:
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
-            
-            if args.use_rpn_optimizer:
-                rpn_optimizer.step()
 
         else:
             fp16_scaler.scale(loss).backward()
