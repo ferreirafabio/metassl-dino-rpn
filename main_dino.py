@@ -408,7 +408,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             1e-4 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
-            warmup_epochs=0,  # don't warmup RPN
+            warmup_epochs=args.warmup_epochs,
             )
     
     # momentum parameter is increased to 1. during training with a cosine schedule
@@ -594,14 +594,14 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
+            optimizer.step()
+            
             if it % 500 == 0:
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
-
-            optimizer.step()
             
             if args.use_rpn_optimizer:
                 rpn_optimizer.step()
@@ -614,12 +614,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
                 
-            if it % 500 == 0:
-                print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-                print("--------------------------------------------------------")
-                print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
-                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
             
             # for name, param in rpn.module.backbone.localization.named_parameters():
             #     if param.requires_grad:
@@ -631,6 +625,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 fp16_scaler.step(rpn_optimizer)
                 
             fp16_scaler.update()
+            
+            if it % 500 == 0:
+                print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                print("--------------------------------------------------------")
+                print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
             # prints currently alive Tensors and Variables
             # import gc
