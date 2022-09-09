@@ -146,6 +146,8 @@ def get_args_parser():
     parser.add_argument("--invert_rpn_gradients", default=False, type=utils.bool_flag, help="Set this flag to invert the gradients used to learn the RPN")
     parser.add_argument("--use_rpn_optimizer", default=False, type=utils.bool_flag, help="Set this flag to use a separate optimizer for the RPN parameters; "
                                                                          "annealed with cosine and no warmup")
+    parser.add_argument('--stn_mode', default='affine', type=str, help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
+                                                                       'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
     
     return parser
 
@@ -298,7 +300,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(backbone="resnet18", stn_mode="affine")
+    transform_net = STN(backbone="resnet18", stn_mode=args.stn_mode)
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions
@@ -564,7 +566,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         # print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
-        # images = [im.cuda(non_blocking=True) for im in images]
+        images = [im.cuda(non_blocking=True) for im in images]
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
         # teacher and student forward passes + compute dino loss
@@ -654,6 +656,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+        if args.use_rpn_optimizer:
+            metric_logger.update(lrrpn=rpn_optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
     
     # gather the stats from all processes
