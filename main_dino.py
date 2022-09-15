@@ -148,6 +148,9 @@ def get_args_parser():
                                                                          "annealed with cosine and no warmup")
     parser.add_argument('--stn_mode', default='affine', type=str, help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
                                                                        'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
+    parser.add_argument("--rpnlr", default=1e-3, type=float, help="""Learning rate at the end of
+        linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
+        with the batch size, and specified here for a reference batch size of 256.""")
     
     return parser
 
@@ -407,7 +410,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     rpn_lr_schedule = None
     if rpn_optimizer:
         rpn_lr_schedule = utils.cosine_scheduler(
-            1e-3 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+            args.rpnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
             warmup_epochs=args.warmup_epochs,
