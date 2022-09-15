@@ -407,7 +407,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     rpn_lr_schedule = None
     if rpn_optimizer:
         rpn_lr_schedule = utils.cosine_scheduler(
-            1e-4 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+            1e-3 * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
             warmup_epochs=args.warmup_epochs,
