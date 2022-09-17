@@ -260,8 +260,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
     else:
-        print("--------------shuffle data deactivated-------------")
-        sampler = torch.utils.data.DistributedSampler(dataset, shuffle=False)
+        sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     
     data_loader = torch.utils.data.DataLoader(
         dataset,
