@@ -924,9 +924,9 @@ class SummaryWriterCustom(SummaryWriter):
         self.batch_size = batch_size
         self.writer = SummaryWriter(out_path)
 
-    def write_image_grid(self, images, global_step, tag):
+    def write_image_grid(self, tag, images, global_step):
         fig = image_grid(images=images, batch_size=self.batch_size)
-        self.writer.add_figure(tag fig, global_step=global_step)
+        self.writer.add_figure(tag, fig, global_step=global_step)
 
     def add_scalar(self, tag, scalar_value, global_step):
         self.writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
