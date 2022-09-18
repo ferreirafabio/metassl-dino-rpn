@@ -448,7 +448,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         )
     start_epoch = to_restore["epoch"]
 
-    summary_writer = SummaryWriterCustom(args.output_dir / "summary", batch_size=args.batch_size_per_gpu)
+    summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
 
     start_time = time.time()
     print("Starting DINO training !")
@@ -580,12 +580,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
             
-            if it % 500 == 0:
-                summary_writer.write_image_grid(tag="uncropped images", images=uncropped_images, global_step=it)
-                summary_writer.write_image_grid(tag="global view 1", images=images[0], global_step=it)
-                summary_writer.write_image_grid(tag="global view 2", images=images[1], global_step=it)
-                summary_writer.write_image_grid(tag="local view 1", images=images[2], global_step=it)
-                summary_writer.write_image_grid(tag="local view 2", images=images[3], global_step=it)
+            if it % 200 == 0:
+                # summary_writer.write_image_grid(tag="uncropped images", images=uncropped_images, global_step=it)
+                summary_writer.write_image_grid(tag="global view 1", images=images[0], original_images=uncropped_images, global_step=it)
+                summary_writer.write_image_grid(tag="global view 2", images=images[1], original_images=uncropped_images, global_step=it)
+                summary_writer.write_image_grid(tag="local view 1", images=images[2], original_images=uncropped_images, global_step=it)
+                summary_writer.write_image_grid(tag="local view 2", images=images[3], original_images=uncropped_images, global_step=it)
                 uncropped_images = None
             
             # continue

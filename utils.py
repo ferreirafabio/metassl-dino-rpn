@@ -887,13 +887,19 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
 
 
-def image_grid(images, batch_size=16):
+def image_grid(images, original_images, batch_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(20, 20))
-    # true_labels = true_labels.cpu().detach().numpy()
-    # pred_labels = pred_labels.cpu().detach().numpy()
-    for i in range(batch_size):
+
+    images = list(images)
+    # original_images = list(original_images)
+    
+    merged = result = [None]*(len(images)+len(original_images))
+    result[::2] = images
+    result[1::2] = original_images
+
+    for i in range(batch_size*2):
         # Start next subplot.
         # true_label = "true:" + str(int(np.argmax(true_labels[i])))
         # pred_label = " pred:" + str(int(np.argmax(pred_labels[i])))
@@ -903,16 +909,23 @@ def image_grid(images, batch_size=16):
         plt.xticks([])
         plt.yticks([])
         plt.grid(False)
-        # print(images.size())
-        img = images[i].cpu().detach().numpy()
+        
+        img = merged[i].cpu().detach().numpy()
+        #
+        # if i == 0 or i % 2 == 0:
+        #     img = images[i].cpu().detach().numpy()
+        # else:
+        #     img = original_images[i].cpu().detach().numpy()
+            
         if img.shape[0] == 3:
             # CIFAR100 case
             img = np.transpose(img)
         else:
             # MNIST case
             img = img.squeeze()
-        
+            
         plt.imshow(img)
+
         # plt.imshow(img, norm=norm_red_green(), cmap=cmap_black_white())
         # plt.imshow(images[i].cpu().detach().numpy().squeeze(), cmap=plt.cm.binary)
     return figure
@@ -924,8 +937,8 @@ class SummaryWriterCustom(SummaryWriter):
         self.batch_size = batch_size
         self.writer = SummaryWriter(out_path)
 
-    def write_image_grid(self, tag, images, global_step):
-        fig = image_grid(images=images, batch_size=self.batch_size)
+    def write_image_grid(self, tag, images, original_images, global_step):
+        fig = image_grid(images=images, original_images=original_images, batch_size=self.batch_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
 
     def add_scalar(self, tag, scalar_value, global_step):
