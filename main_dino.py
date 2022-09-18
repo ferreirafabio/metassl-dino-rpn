@@ -36,7 +36,7 @@ from torchvision import models as torchvision_models
 from eval_linear import eval_linear
 
 import utils
-from utils import custom_collate
+from utils import custom_collate, SummaryWriterCustom
 import vision_transformer as vits
 from vision_transformer import DINOHead
 from functools import partial
@@ -448,6 +448,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         )
     start_epoch = to_restore["epoch"]
 
+    summary_writer = SummaryWriterCustom(args.output_dir / "summary", batch_size=args.batch_size_per_gpu)
+
     start_time = time.time()
     print("Starting DINO training !")
 
@@ -462,7 +464,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,
-                epoch, fp16_scaler, rpn, args)
+                epoch, fp16_scaler, rpn, args, summary_writer)
     
             # ============ writing logs ... ============
             save_dict = {
@@ -548,7 +550,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, rpn, args):
+                    fp16_scaler, rpn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
@@ -571,9 +573,21 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
+        if it % 500 == 0:
+            uncropped_images = images
+        
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
+            
+            if it % 500 == 0:
+                summary_writer.write_image_grid(tag="uncropped images", images=uncropped_images, global_step=it)
+                summary_writer.write_image_grid(tag="global view 1", images=images[0], global_step=it)
+                summary_writer.write_image_grid(tag="global view 2", images=images[1], global_step=it)
+                summary_writer.write_image_grid(tag="local view 1", images=images[2], global_step=it)
+                summary_writer.write_image_grid(tag="local view 2", images=images[3], global_step=it)
+                uncropped_images = None
+            
             # continue
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)

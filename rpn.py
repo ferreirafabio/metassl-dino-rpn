@@ -58,7 +58,7 @@ def grad_reverse(x, scale=1.0):
 
 
 class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet18', out_dim=256, invert_rpn_gradients=False):
+    def __init__(self, backbone='resnet18', out_dim=512, invert_rpn_gradients=False):
         super().__init__()
         
         self.invert_rpn_gradients = invert_rpn_gradients
@@ -97,7 +97,7 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, backbone="resnet18", stn_mode='affine', localization_dim=256, invert_rpn_gradients=False):
+    def __init__(self, backbone="resnet18", stn_mode='affine', localization_dim=512, invert_rpn_gradients=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
@@ -192,7 +192,6 @@ class STN(nn.Module):
             theta_new = theta.view(-1, 2, 3)
         else:
             theta_new = torch.zeros([x.size(0), 2, 3], dtype=torch.float32, device=x.get_device(), requires_grad=True)
-            # theta1 = Variable(torch.zeros([x.size(0), 2, 3], dtype=torch.float32, device=x.get_device()), requires_grad=True)
             theta_new = theta_new + 0
             theta_new[:, 0, 0] = 1.0
             theta_new[:, 1, 1] = 1.0

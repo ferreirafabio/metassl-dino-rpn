@@ -33,6 +33,8 @@ import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 from typing import Any, List, Union, Type
+from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
 
 
 class GaussianBlur(nn.Module):
@@ -883,3 +885,51 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     """
     assert pretrained == False, "no pre-trained resnet9 model available"
     return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
+
+
+def image_grid(images, batch_size=16):
+    """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
+    # Create a figure to contain the plot.
+    figure = plt.figure(figsize=(20, 20))
+    # true_labels = true_labels.cpu().detach().numpy()
+    # pred_labels = pred_labels.cpu().detach().numpy()
+    for i in range(batch_size):
+        # Start next subplot.
+        # true_label = "true:" + str(int(np.argmax(true_labels[i])))
+        # pred_label = " pred:" + str(int(np.argmax(pred_labels[i])))
+        # title = true_label + pred_label
+        # plt.subplot(8, 4, i + 1, title=title)  # todo: support higher batch sizes
+        plt.subplot(8, 4, i + 1)  # todo: support higher batch sizes
+        plt.xticks([])
+        plt.yticks([])
+        plt.grid(False)
+        # print(images.size())
+        img = images[i].cpu().detach().numpy()
+        if img.shape[0] == 3:
+            # CIFAR100 case
+            img = np.transpose(img)
+        else:
+            # MNIST case
+            img = img.squeeze()
+        
+        plt.imshow(img)
+        # plt.imshow(img, norm=norm_red_green(), cmap=cmap_black_white())
+        # plt.imshow(images[i].cpu().detach().numpy().squeeze(), cmap=plt.cm.binary)
+    return figure
+
+
+class SummaryWriterCustom(SummaryWriter):
+    def __init__(self, out_path, batch_size):
+        # super().__init__()
+        self.batch_size = batch_size
+        self.writer = SummaryWriter(out_path)
+
+    def write_image_grid(self, images, global_step, tag):
+        fig = image_grid(images=images, batch_size=self.batch_size)
+        self.writer.add_figure(tag fig, global_step=global_step)
+
+    def add_scalar(self, tag, scalar_value, global_step):
+        self.writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
+
+    def close(self):
+        self.writer.close()
