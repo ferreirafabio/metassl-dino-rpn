@@ -181,22 +181,22 @@ class STN(nn.Module):
         # self.fc_localization_global1[2].weight.data.fill_(0)
         self.fc_localization_global1.linear2.weight.data.fill_(0)
         # self.fc_localization_global1[2].weight.data.zero_()
-        self.fc_localization_global1.linear2.weight.data.zero_(0)
+        self.fc_localization_global1.linear2.weight.data.zero_()
         
         # self.fc_localization_global2[2].weight.data.fill_(0)
         self.fc_localization_global2.linear2.weight.data.fill_(0)
         # self.fc_localization_global2[2].weight.data.zero_()
-        self.fc_localization_global2.linear2.weight.data.zero_(0)
+        self.fc_localization_global2.linear2.weight.data.zero_()
         
         # self.fc_localization_local1[2].weight.data.fill_(0)
         self.fc_localization_local1.linear2.weight.data.fill_(0)
         # self.fc_localization_local1[2].weight.data.zero_()
-        self.fc_localization_local1.linear2.weight.data.zero_(0)
+        self.fc_localization_local1.linear2.weight.data.zero_()
         
         # self.fc_localization_local2[2].weight.data.fill_(0)
         self.fc_localization_local2.linear2.weight.data.fill_(0)
         # self.fc_localization_local2[2].weight.data.zero_()
-        self.fc_localization_local2.linear2.weight.data.zero_(0)
+        self.fc_localization_local2.linear2.weight.data.zero_()
         
         if self.stn_mode == 'affine':
             # self.fc_localization_global1[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
