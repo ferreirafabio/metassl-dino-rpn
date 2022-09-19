@@ -98,7 +98,7 @@ class LocalizationNet(nn.Module):
         super().__init__()
         
         self.invert_gradients = invert_gradients
-        self.conv2d_1 = nn.Conv2d(1, 8, kernel_size=7)
+        self.conv2d_1 = nn.Conv2d(3, 8, kernel_size=7)
         self.maxpool2d_1 = nn.MaxPool2d(2, stride=2)
         self.conv2d_2 = nn.Conv2d(8, 10, kernel_size=5)
         self.maxpool2d_2 = nn.MaxPool2d(2, stride=2)
