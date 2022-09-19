@@ -241,10 +241,10 @@ class STN(nn.Module):
         return theta_new
     
     def forward(self, x):
-        xs = self.localization_net(x)
-        
         if self.invert_rpn_gradients:
             x = grad_reverse(x)
+            
+        xs = self.localization_net(x)
         
         theta_g1 = self.fc_localization_global1(xs)
         theta_g2 = self.fc_localization_global2(xs)
@@ -252,8 +252,8 @@ class STN(nn.Module):
         theta_l2 = self.fc_localization_local2(xs)
         # print(f"theta g1: {theta_g1}")
         # print(f"theta g2: {theta_g2}")
-        # print(f"theta l1: {theta_l1}")
-        # print(f"theta l2: {theta_l2}")
+        print(f"theta l1: {theta_l1}")
+        print(f"theta l2: {theta_l2}")
 
         theta_g1 = self._get_stn_mode_theta(theta_g1, xs)
         theta_g2 = self._get_stn_mode_theta(theta_g2, xs)
