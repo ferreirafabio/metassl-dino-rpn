@@ -102,6 +102,7 @@ class LocalizationNet(nn.Module):
         self.maxpool2d_1 = nn.MaxPool2d(2, stride=2)
         self.conv2d_2 = nn.Conv2d(8, 10, kernel_size=5)
         self.maxpool2d_2 = nn.MaxPool2d(2, stride=2)
+        # self.linear = nn.Linear()
         
     def forward(self, x):
         if self.invert_gradients:
@@ -144,8 +145,8 @@ class STN(nn.Module):
         self.invert_rpn_gradients = invert_rpn_gradients
         
         # Spatial transformer localization-network
-        # self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
-        self.localization_net = LocalizationNet(invert_rpn_gradients)
+        self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
+        # self.localization_net = LocalizationNet(invert_rpn_gradients)
 
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
