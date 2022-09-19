@@ -895,9 +895,9 @@ def image_grid(images, original_images, batch_size=16):
     images = list(images)
     # original_images = list(original_images)
     
-    merged = result = [None]*(len(images)+len(original_images))
-    result[::2] = images
-    result[1::2] = original_images
+    merged = [None]*(len(images)+len(original_images))
+    merged[::2] = images
+    merged[1::2] = original_images
 
     for i in range(batch_size*2):
         # Start next subplot.
