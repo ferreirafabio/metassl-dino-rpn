@@ -22,7 +22,7 @@ import neps
 import logging
 from pathlib import Path
 import pickle
-
+import copy
 import numpy as np
 from PIL import Image
 import torch
@@ -574,7 +574,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
         if it % 200 == 0:
-            uncropped_images = images
+            uncropped_images = copy.deepcopy(images)
         
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):

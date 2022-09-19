@@ -890,7 +890,7 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
 def image_grid(images, original_images, batch_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
-    figure = plt.figure(figsize=(20, 20))
+    figure = plt.figure(figsize=(25, 20))
 
     images = list(images)
     # original_images = list(original_images)

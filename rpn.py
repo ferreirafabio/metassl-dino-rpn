@@ -91,7 +91,46 @@ class ResNetRPN(nn.Module):
             
         x = self.backbone(x)
         return x
+    
+    
+class LocalizationNet(nn.Module):
+    def __init__(self, invert_gradients):
+        super().__init__()
+        
+        self.invert_gradients = invert_gradients
+        self.conv2d_1 = nn.Conv2d(1, 8, kernel_size=7)
+        self.maxpool2d_1 = nn.MaxPool2d(2, stride=2)
+        self.conv2d_2 = nn.Conv2d(8, 10, kernel_size=5)
+        self.maxpool2d_2 = nn.MaxPool2d(2, stride=2)
+        
+    def forward(self, x):
+        if self.invert_gradients:
+            x = grad_reverse(x)
+            
+        x = F.relu(self.maxpool2d_1(self.conv2d_1(x)))
+        x = F.relu(self.maxpool2d_2(self.conv2d_2(x)))
+        print(x.size())
+        return x
 
+
+class LocHead(nn.Module):
+    def __init__(self, invert_gradients, stn_mode):
+        super().__init__()
+        
+        self.invert_gradients = invert_gradients
+        self.stn_n_params = N_PARAMS[stn_mode]
+        
+        self.linear1 = nn.Linear(90, 32)
+        self.linear2 = nn.Linear(32, self.stn_n_params)
+    
+    def forward(self, x):
+        if self.invert_gradients:
+            x = grad_reverse(x)
+        
+        x = F.relu(self.linear1(x))
+        x = self.linear2(x)
+        return x
+    
 
 class STN(nn.Module):
     """"
@@ -105,32 +144,38 @@ class STN(nn.Module):
         self.invert_rpn_gradients = invert_rpn_gradients
         
         # Spatial transformer localization-network
-        self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
-        
+        # self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
+        self.localization_net = LocalizationNet(invert_rpn_gradients)
+
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = nn.Sequential(
-            nn.Linear(self.localization_dim, 32),
-            nn.ReLU(True),
-            nn.Linear(32, self.stn_n_params)
-            )
-
-        self.fc_localization_global2 = nn.Sequential(
-            nn.Linear(self.localization_dim, 32),
-            nn.ReLU(True),
-            nn.Linear(32, self.stn_n_params)
-            )
-
-        self.fc_localization_local1 = nn.Sequential(
-            nn.Linear(self.localization_dim, 32),
-            nn.ReLU(True),
-            nn.Linear(32, self.stn_n_params)
-            )
+        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
         
-        self.fc_localization_local2 = nn.Sequential(
-            nn.Linear(self.localization_dim, 32),
-            nn.ReLU(True),
-            nn.Linear(32, self.stn_n_params)
-            )
+        # self.fc_localization_global1 = nn.Sequential(
+        #     nn.Linear(self.localization_dim, 32),
+        #     nn.ReLU(True),
+        #     nn.Linear(32, self.stn_n_params)
+        #     )
+
+        # self.fc_localization_global2 = nn.Sequential(
+        #     nn.Linear(self.localization_dim, 32),
+        #     nn.ReLU(True),
+        #     nn.Linear(32, self.stn_n_params)
+        #     )
+
+        # self.fc_localization_local1 = nn.Sequential(
+        #     nn.Linear(self.localization_dim, 32),
+        #     nn.ReLU(True),
+        #     nn.Linear(32, self.stn_n_params)
+        #     )
+        #
+        # self.fc_localization_local2 = nn.Sequential(
+        #     nn.Linear(self.localization_dim, 32),
+        #     nn.ReLU(True),
+        #     nn.Linear(32, self.stn_n_params)
+        #     )
         
         # Initialize the weights/bias with identity transformation
         self.fc_localization_global1[2].weight.data.fill_(0)
@@ -250,16 +295,16 @@ class STN(nn.Module):
         theta_g2 = self.fc_localization_global2(xs)
         theta_l1 = self.fc_localization_local1(xs)
         theta_l2 = self.fc_localization_local2(xs)
-        # print(f"theta g1: {theta_g1}")
-        # print(f"theta g2: {theta_g2}")
-        print(f"theta l1: {theta_l1}")
-        print(f"theta l2: {theta_l2}")
-
+        
         theta_g1 = self._get_stn_mode_theta(theta_g1, xs)
         theta_g2 = self._get_stn_mode_theta(theta_g2, xs)
         theta_l1 = self._get_stn_mode_theta(theta_l1, xs)
         theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
-        
+        # print(f"theta g1: {theta_g1}")
+        # print(f"theta g2: {theta_g2}")
+        print(f"theta l1: {theta_l1}")
+        print(f"theta l2: {theta_l2}")
+        print(list(x.size()[:2]) + [224, 224])
         grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
         g1 = F.grid_sample(x, grid)
 
