@@ -573,7 +573,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
-        if it % 500 == 0:
+        if it % 200 == 0:
             uncropped_images = images
         
         # teacher and student forward passes + compute dino loss
