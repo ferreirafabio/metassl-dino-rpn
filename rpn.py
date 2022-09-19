@@ -115,13 +115,13 @@ class LocalizationNet(nn.Module):
 
 
 class LocHead(nn.Module):
-    def __init__(self, invert_gradients, stn_mode):
+    def __init__(self, invert_gradients, stn_mode, out_dim):
         super().__init__()
         
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
         
-        self.linear1 = nn.Linear(90, 32)
+        self.linear1 = nn.Linear(out_dim, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
     def forward(self, x):
@@ -137,7 +137,7 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, backbone="resnet18", stn_mode='affine', localization_dim=512, invert_rpn_gradients=False):
+    def __init__(self, backbone="resnet18", stn_mode='affine', localization_dim=256, invert_rpn_gradients=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
@@ -149,10 +149,10 @@ class STN(nn.Module):
         # self.localization_net = LocalizationNet(invert_rpn_gradients)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
-        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
-        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
-        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
+        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
+        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
+        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
         
         # self.fc_localization_global1 = nn.Sequential(
         #     nn.Linear(self.localization_dim, 32),
