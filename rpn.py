@@ -58,7 +58,7 @@ def grad_reverse(x, scale=1.0):
 
 
 class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet18', out_dim=512, invert_rpn_gradients=False):
+    def __init__(self, backbone='resnet18', out_dim=256, invert_rpn_gradients=False):
         super().__init__()
         
         self.invert_rpn_gradients = invert_rpn_gradients
@@ -110,7 +110,7 @@ class LocalizationNet(nn.Module):
             
         x = F.relu(self.maxpool2d_1(self.conv2d_1(x)))
         x = F.relu(self.maxpool2d_2(self.conv2d_2(x)))
-        print(x.size())
+        
         return x
 
 
@@ -315,9 +315,9 @@ class STN(nn.Module):
         theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
         # print(f"theta g1: {theta_g1}")
         # print(f"theta g2: {theta_g2}")
-        print(f"theta l1: {theta_l1}")
-        print(f"theta l2: {theta_l2}")
-        print(list(x.size()[:2]) + [224, 224])
+        # print(f"theta l1: {theta_l1}")
+        # print(f"theta l2: {theta_l2}")
+        
         grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
         g1 = F.grid_sample(x, grid)
 
