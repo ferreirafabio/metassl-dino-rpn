@@ -98,18 +98,26 @@ class LocalizationNet(nn.Module):
         super().__init__()
         
         self.invert_gradients = invert_gradients
-        self.conv2d_1 = nn.Conv2d(3, 8, kernel_size=7)
+        self.conv2d_1 = nn.Conv2d(3, 10, kernel_size=7, stride=2, padding=3)
         self.maxpool2d_1 = nn.MaxPool2d(2, stride=2)
-        self.conv2d_2 = nn.Conv2d(8, 10, kernel_size=5)
-        self.maxpool2d_2 = nn.MaxPool2d(2, stride=2)
-        # self.linear = nn.Linear()
+        self.conv2d_2 = nn.Conv2d(10, 10, kernel_size=3)
+        self.avgpool = nn.AdaptiveAvgPool2d((32, 32))
+        self.relu = nn.ReLU(True)
+        # self.linear = nn.Linear(32*32*10, 256)
         
     def forward(self, x):
         if self.invert_gradients:
             x = grad_reverse(x)
             
         x = F.relu(self.maxpool2d_1(self.conv2d_1(x)))
-        x = F.relu(self.maxpool2d_2(self.conv2d_2(x)))
+        x = self.conv2d_2(x)
+        x = self.avgpool(x)
+        # print("----------------------------------------------------")
+        # print(x.shape)
+        # x = torch.flatten(x, 1)
+        # print(x.shape)
+        # x = self.linear(x)
+        x = self.relu(x)
         
         return x
 
@@ -121,13 +129,15 @@ class LocHead(nn.Module):
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
         
-        self.linear1 = nn.Linear(out_dim, 32)
+        # self.linear1 = nn.Linear(out_dim, 32)
+        self.linear1 = nn.Linear(32*32*10, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
     def forward(self, x):
         if self.invert_gradients:
             x = grad_reverse(x)
         
+        x = torch.flatten(x, 1)
         x = F.relu(self.linear1(x))
         x = self.linear2(x)
         return x
@@ -145,8 +155,8 @@ class STN(nn.Module):
         self.invert_rpn_gradients = invert_rpn_gradients
         
         # Spatial transformer localization-network
-        self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
-        # self.localization_net = LocalizationNet(invert_rpn_gradients)
+        # self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
+        self.localization_net = LocalizationNet(invert_rpn_gradients)
 
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
@@ -154,96 +164,60 @@ class STN(nn.Module):
         self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
         self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
         
-        # self.fc_localization_global1 = nn.Sequential(
-        #     nn.Linear(self.localization_dim, 32),
-        #     nn.ReLU(True),
-        #     nn.Linear(32, self.stn_n_params)
-        #     )
-
-        # self.fc_localization_global2 = nn.Sequential(
-        #     nn.Linear(self.localization_dim, 32),
-        #     nn.ReLU(True),
-        #     nn.Linear(32, self.stn_n_params)
-        #     )
-
-        # self.fc_localization_local1 = nn.Sequential(
-        #     nn.Linear(self.localization_dim, 32),
-        #     nn.ReLU(True),
-        #     nn.Linear(32, self.stn_n_params)
-        #     )
-        #
-        # self.fc_localization_local2 = nn.Sequential(
-        #     nn.Linear(self.localization_dim, 32),
-        #     nn.ReLU(True),
-        #     nn.Linear(32, self.stn_n_params)
-        #     )
-        
         # Initialize the weights/bias with identity transformation
-        # self.fc_localization_global1[2].weight.data.fill_(0)
         self.fc_localization_global1.linear2.weight.data.fill_(0)
-        # self.fc_localization_global1[2].weight.data.zero_()
         self.fc_localization_global1.linear2.weight.data.zero_()
         
-        # self.fc_localization_global2[2].weight.data.fill_(0)
         self.fc_localization_global2.linear2.weight.data.fill_(0)
-        # self.fc_localization_global2[2].weight.data.zero_()
         self.fc_localization_global2.linear2.weight.data.zero_()
         
-        # self.fc_localization_local1[2].weight.data.fill_(0)
         self.fc_localization_local1.linear2.weight.data.fill_(0)
-        # self.fc_localization_local1[2].weight.data.zero_()
         self.fc_localization_local1.linear2.weight.data.zero_()
         
-        # self.fc_localization_local2[2].weight.data.fill_(0)
         self.fc_localization_local2.linear2.weight.data.fill_(0)
-        # self.fc_localization_local2[2].weight.data.zero_()
         self.fc_localization_local2.linear2.weight.data.zero_()
         
         if self.stn_mode == 'affine':
-            # self.fc_localization_global1[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
-            # self.fc_localization_global2[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
-            # self.fc_localization_local1[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
-            # self.fc_localization_local2[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             
         elif self.stn_mode in ['translation', 'shear']:
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
         elif self.stn_mode == 'scale':
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
         elif self.stn_mode == 'rotation':
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0], dtype=torch.float))
         elif self.stn_mode == 'rotation_scale':
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 1, 1], dtype=torch.float))
         elif self.stn_mode == 'translation_scale':
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 1, 1], dtype=torch.float))
         elif self.stn_mode == 'rotation_translation':
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 0], dtype=torch.float))
         elif self.stn_mode == 'rotation_translation_scale':
-            self.fc_localization_global1[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
-            self.fc_localization_global2[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
-            self.fc_localization_local1[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
-            self.fc_localization_local2[2].bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
             
     def _get_stn_mode_theta(self, theta, x):
         if self.stn_mode == 'affine':
@@ -318,17 +292,17 @@ class STN(nn.Module):
         # print(f"theta l1: {theta_l1}")
         # print(f"theta l2: {theta_l2}")
         
-        grid = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
-        g1 = F.grid_sample(x, grid)
+        gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
+        g1 = F.grid_sample(x, gridg1)
 
-        grid = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [224, 224])
-        g2 = F.grid_sample(x, grid)
+        gridg2 = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [224, 224])
+        g2 = F.grid_sample(x, gridg2)
 
-        grid = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [96, 96])
-        l1 = F.grid_sample(x, grid)
+        gridl1 = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [96, 96])
+        l1 = F.grid_sample(x, gridl1)
 
-        grid = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [96, 96])
-        l2 = F.grid_sample(x, grid)
+        gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [96, 96])
+        l2 = F.grid_sample(x, gridl2)
         
         return [g1, g2, l1, l2]
         

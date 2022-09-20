@@ -918,8 +918,8 @@ def image_grid(images, original_images, batch_size=16):
         #     img = original_images[i].cpu().detach().numpy()
             
         if img.shape[0] == 3:
-            # CIFAR100 case
-            img = np.transpose(img)
+            # CIFAR100 and ImageNet case
+            img = np.moveaxis(img, 0, -1)
         else:
             # MNIST case
             img = img.squeeze()

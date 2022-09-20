@@ -618,9 +618,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 rpn_optimizer.step()
 
             if it % 200 == 0:
-                print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                # print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 print("--------------------------------------------------------")
-                print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
@@ -644,9 +646,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             fp16_scaler.update()
             
             if it % 200 == 0:
-                print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                # print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 print("--------------------------------------------------------")
-                print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
+                print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
