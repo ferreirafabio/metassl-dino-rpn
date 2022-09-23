@@ -151,6 +151,7 @@ def get_args_parser():
     parser.add_argument("--rpnlr", default=1e-3, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
+    parser.add_argument("--joint_localization_net", default=True, type=utils.bool_flag, help="Set this flag to use a joint localization network instead of multiple (one for each head when set to False).")
     
     return parser
 
@@ -302,7 +303,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(backbone="resnet18", stn_mode=args.stn_mode)
+    transform_net = STN(backbone="resnet18", stn_mode=args.stn_mode, joint_localization_net=args.joint_localization_net)
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions

@@ -94,31 +94,22 @@ class ResNetRPN(nn.Module):
     
     
 class LocalizationNet(nn.Module):
-    def __init__(self, invert_gradients):
+    def __init__(self, invert_gradients, conv1_depth=16, conv2_depth=8):
         super().__init__()
         
         self.invert_gradients = invert_gradients
-        self.conv2d_1 = nn.Conv2d(3, 10, kernel_size=7, stride=2, padding=3)
-        self.maxpool2d_1 = nn.MaxPool2d(2, stride=2)
-        self.conv2d_2 = nn.Conv2d(10, 10, kernel_size=3)
-        self.avgpool = nn.AdaptiveAvgPool2d((32, 32))
+        self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
+        self.maxpool2d = nn.MaxPool2d(2, stride=2)
+        self.conv2d_2 = nn.Conv2d(16, conv2_depth, kernel_size=3, padding=2)
+        self.avgpool = nn.AdaptiveAvgPool2d((16, 16))
         self.relu = nn.ReLU(True)
-        # self.linear = nn.Linear(32*32*10, 256)
         
     def forward(self, x):
         if self.invert_gradients:
             x = grad_reverse(x)
             
-        x = F.relu(self.maxpool2d_1(self.conv2d_1(x)))
-        x = self.conv2d_2(x)
-        x = self.avgpool(x)
-        # print("----------------------------------------------------")
-        # print(x.shape)
-        # x = torch.flatten(x, 1)
-        # print(x.shape)
-        # x = self.linear(x)
-        x = self.relu(x)
-        
+        x = self.maxpool2d(F.relu(self.conv2d_1(x)))
+        x = self.avgpool(F.relu(self.conv2d_2(x)))
         return x
 
 
@@ -129,8 +120,7 @@ class LocHead(nn.Module):
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
         
-        # self.linear1 = nn.Linear(out_dim, 32)
-        self.linear1 = nn.Linear(32*32*10, 32)
+        self.linear1 = nn.Linear(16*16*8, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
     def forward(self, x):
@@ -147,34 +137,33 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, backbone="resnet18", stn_mode='affine', localization_dim=256, invert_rpn_gradients=False):
+    def __init__(self, backbone="resnet18", stn_mode='affine', invert_rpn_gradients=False, joint_localization_net=True):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
-        self.localization_dim = localization_dim
         self.invert_rpn_gradients = invert_rpn_gradients
+        self.joint_localization_net = joint_localization_net
         
         # Spatial transformer localization-network
-        # self.localization_net = ResNetRPN(backbone=backbone, out_dim=localization_dim, invert_rpn_gradients=invert_rpn_gradients)
-        self.localization_net = LocalizationNet(invert_rpn_gradients)
+        # self.localization_net = ResNetRPN(backbone=backbone, out_dim=256, invert_rpn_gradients=invert_rpn_gradients)
+        if self.joint_localization_net:
+            self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=16, conv2_depth=8)
+        else:
+            self.localization_net_g1 = LocalizationNet(invert_rpn_gradients, conv1_depth=8, conv2_depth=8)
+            self.localization_net_g2 = LocalizationNet(invert_rpn_gradients, conv1_depth=8, conv2_depth=8)
+            self.localization_net_l1 = LocalizationNet(invert_rpn_gradients, conv1_depth=8, conv2_depth=8)
+            self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=8, conv2_depth=8)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
-        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
-        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
-        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, out_dim=localization_dim)
+        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
+        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
         
         # Initialize the weights/bias with identity transformation
-        self.fc_localization_global1.linear2.weight.data.fill_(0)
         self.fc_localization_global1.linear2.weight.data.zero_()
-        
-        self.fc_localization_global2.linear2.weight.data.fill_(0)
         self.fc_localization_global2.linear2.weight.data.zero_()
-        
-        self.fc_localization_local1.linear2.weight.data.fill_(0)
         self.fc_localization_local1.linear2.weight.data.zero_()
-        
-        self.fc_localization_local2.linear2.weight.data.fill_(0)
         self.fc_localization_local2.linear2.weight.data.zero_()
         
         if self.stn_mode == 'affine':
@@ -276,17 +265,28 @@ class STN(nn.Module):
         if self.invert_rpn_gradients:
             x = grad_reverse(x)
             
-        xs = self.localization_net(x)
+        if self.joint_localization_net:
+            x_loc_features = self.localization_net(x)
+            
+            theta_g1 = self.fc_localization_global1(x_loc_features)
+            theta_g2 = self.fc_localization_global2(x_loc_features)
+            theta_l1 = self.fc_localization_local1(x_loc_features)
+            theta_l2 = self.fc_localization_local2(x_loc_features)
+        else:
+            x_loc_features_g1 = self.localization_net_g1(x)
+            x_loc_features_g2 = self.localization_net_g2(x)
+            x_loc_features_l1 = self.localization_net_l1(x)
+            x_loc_features_l2 = self.localization_net_l2(x)
+            
+            theta_g1 = self.fc_localization_global1(x_loc_features_g1)
+            theta_g2 = self.fc_localization_global2(x_loc_features_g2)
+            theta_l1 = self.fc_localization_local1(x_loc_features_l1)
+            theta_l2 = self.fc_localization_local2(x_loc_features_l2)
         
-        theta_g1 = self.fc_localization_global1(xs)
-        theta_g2 = self.fc_localization_global2(xs)
-        theta_l1 = self.fc_localization_local1(xs)
-        theta_l2 = self.fc_localization_local2(xs)
-        
-        theta_g1 = self._get_stn_mode_theta(theta_g1, xs)
-        theta_g2 = self._get_stn_mode_theta(theta_g2, xs)
-        theta_l1 = self._get_stn_mode_theta(theta_l1, xs)
-        theta_l2 = self._get_stn_mode_theta(theta_l2, xs)
+        theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features)
+        theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features)
+        theta_l1 = self._get_stn_mode_theta(theta_l1, x_loc_features)
+        theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features)
         # print(f"theta g1: {theta_g1}")
         # print(f"theta g2: {theta_g2}")
         # print(f"theta l1: {theta_l1}")
@@ -320,46 +320,6 @@ class AugmentationNetwork(nn.Module):
                 ]
             )
 
-        self.modules_g1 = transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
-                transforms.RandomGrayscale(p=0.2),
-                utils.GaussianBlur(1.0),
-                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
-                self.normalize,
-                ]
-            )
-
-        self.modules_g2 = transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
-                transforms.RandomGrayscale(p=0.2),
-                utils.GaussianBlur(1.0),
-                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=1.0),
-                utils.Solarization(0.2),
-                # transforms.RandomSolarize(threshold=128, p=0.2),
-                # kornia.augmentation.RandomSolarize(p=0.2),
-                self.normalize,
-                ]
-            )
-
-        self.modules_l = transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)], p=0.8),
-                transforms.RandomGrayscale(p=0.2),
-                utils.GaussianBlur(0.5),
-                # transforms.RandomApply(transforms.GaussianBlur(kernel_size=5), p=0.5),
-                # kornia.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.5),
-                self.normalize,
-                ]
-            )
-
     def forward(self, imgs):
         global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
         
@@ -380,21 +340,12 @@ class AugmentationNetwork(nn.Module):
             g2_augmented = torch.squeeze(global_local_views[1], 0)
             l1_augmented = torch.squeeze(global_local_views[2], 0)
             l2_augmented = torch.squeeze(global_local_views[3], 0)
-            # g1_augmented = self.modules_g1(torch.squeeze(global_local_views[0], 0))
-            # g2_augmented = self.modules_g2(torch.squeeze(global_local_views[1], 0))
-            # l1_augmented = self.modules_l(torch.squeeze(global_local_views[2], 0))
-            # l2_augmented = self.modules_l(torch.squeeze(global_local_views[3], 0))
 
             global_views1_augmented.append(g1_augmented)
             global_views2_augmented.append(g2_augmented)
             local_views1_augmented.append(l1_augmented)
             local_views2_augmented.append(l2_augmented)
             
-        # global_views1 = torch.stack(global_views1_augmented, 0).cuda()
-        # global_views2 = torch.stack(global_views2_augmented, 0).cuda()
-        # local_views1 = torch.stack(local_views1_augmented, 0).cuda()
-        # local_views2 = torch.stack(local_views2_augmented, 0).cuda()
-
         global_views1 = torch.stack(global_views1_augmented, 0)
         global_views2 = torch.stack(global_views2_augmented, 0)
         local_views1 = torch.stack(local_views1_augmented, 0)
