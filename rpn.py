@@ -310,7 +310,6 @@ class AugmentationNetwork(nn.Module):
                 ]
             )
         
-
     def forward(self, imgs):
         # global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
         feature_maps = []
@@ -324,7 +323,7 @@ class AugmentationNetwork(nn.Module):
             except Exception as e:
                 print(e)
         
-            if self.transform_net.invert_rpn_gradients:
+            if self.stn.invert_rpn_gradients:
                 img = grad_reverse(img)
             
             self.localization_net(img)
