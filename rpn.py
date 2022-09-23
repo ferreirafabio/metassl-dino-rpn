@@ -114,7 +114,7 @@ class LocalizationNet(nn.Module):
 
 
 class LocHead(nn.Module):
-    def __init__(self, invert_gradients, stn_mode, out_dim):
+    def __init__(self, invert_gradients, stn_mode):
         super().__init__()
         
         self.invert_gradients = invert_gradients
