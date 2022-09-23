@@ -303,8 +303,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(backbone="resnet18", stn_mode=args.stn_mode, separate_localization_net=args.separate_localization_net)
-    rpn = AugmentationNetwork(transform_net=transform_net)
+    # transform_net = STN(backbone="resnet18", stn_mode=args.stn_mode)
+    rpn = AugmentationNetwork(stn_mode=args.stn_mode, invert_rpn_gradients=args.invert_rpn_gradients)
     
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
