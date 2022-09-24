@@ -337,7 +337,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
         
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
-    rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu])
+    rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu], find_unused_parameters=True)
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
@@ -375,6 +375,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #         print(name)
     
     rpn_optimizer = None
+
+    # freeze localization net weights
+    for param in rpn.module.localization_net.parameters():
+        param.requires_grad = False
     
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
@@ -580,7 +584,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
-            
+        
             if it % 200 == 0:
                 # summary_writer.write_image_grid(tag="uncropped images", images=uncropped_images, global_step=it)
                 summary_writer.write_image_grid(tag="global view 1", images=images[0], original_images=uncropped_images, global_step=it)
@@ -618,12 +622,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if args.use_rpn_optimizer:
                 rpn_optimizer.step()
 
-            if it % 200 == 0:
+            if it % 10 == 0:
                 # print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+                print(rpn.module.stn.fc_localization_local1.linear2.weight)
                 print("--------------------------------------------------------")
                 # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+                print(rpn.module.stn.fc_localization_local1.linear2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
@@ -646,12 +650,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
             fp16_scaler.update()
             
-            if it % 200 == 0:
+            if it % 10 == 0:
                 # print(rpn.module.transform_net.localization_net.backbone.fc.weight)
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+                print(rpn.module.stn.fc_localization_local1.linear2.weight)
                 print("--------------------------------------------------------")
                 # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+                print(rpn.module.stn.fc_localization_local1.linear2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
@@ -825,6 +829,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+
+    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     
     # DINO run with NEPS
     if args.is_neps_run:

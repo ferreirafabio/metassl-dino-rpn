@@ -916,7 +916,7 @@ def image_grid(images, original_images, batch_size=16):
         #     img = images[i].cpu().detach().numpy()
         # else:
         #     img = original_images[i].cpu().detach().numpy()
-            
+        
         if img.shape[0] == 3:
             # CIFAR100 and ImageNet case
             img = np.moveaxis(img, 0, -1)
