@@ -924,7 +924,7 @@ def image_grid(images, original_images, batch_size=16):
             # MNIST case
             img = img.squeeze()
             
-        plt.imshow(img)
+        plt.imshow(img.astype(np.uint8))  # to prevent clipping valid data range warning
 
         # plt.imshow(img, norm=norm_red_green(), cmap=cmap_black_white())
         # plt.imshow(images[i].cpu().detach().numpy().squeeze(), cmap=plt.cm.binary)

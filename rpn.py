@@ -94,7 +94,7 @@ class ResNetRPN(nn.Module):
     
     
 class LocalizationNet(nn.Module):
-    def __init__(self, invert_gradients, conv1_depth=16, conv2_depth=8):
+    def __init__(self, invert_gradients, conv1_depth=32, conv2_depth=16):
         super().__init__()
         
         self.invert_gradients = invert_gradients
@@ -120,8 +120,8 @@ class LocHead(nn.Module):
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
         
-        self.linear1 = nn.Linear(16*16*conv2_depth, 32)
-        self.linear2 = nn.Linear(32, self.stn_n_params)
+        self.linear1 = nn.Linear(16*16*conv2_depth, 64)
+        self.linear2 = nn.Linear(64, self.stn_n_params)
     
     def forward(self, x):
         if self.invert_gradients:
@@ -361,10 +361,10 @@ class AugmentationNetwork(nn.Module):
         local_views1 = torch.stack(local_views1_augmented, 0)
         local_views2 = torch.stack(local_views2_augmented, 0)
 
-        del global_views1_augmented
-        del global_views2_augmented
-        del local_views1_augmented
-        del local_views2_augmented
+        # del global_views1_augmented
+        # del global_views2_augmented
+        # del local_views1_augmented
+        # del local_views2_augmented
 
         return [global_views1, global_views2, local_views1, local_views2]
     

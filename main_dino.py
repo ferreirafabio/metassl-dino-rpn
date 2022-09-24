@@ -152,6 +152,8 @@ def get_args_parser():
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag, help="Set this flag to use a separate localization network for each head.")
+    parser.add_argument("--summary_writer_freq", default=500, type=int, help="Defines the number of iterations the summary writer will write output.")
+    parser.add_argument("--grad_check_freq", default=500, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
     
     return parser
 
@@ -574,15 +576,14 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
-        if it % 200 == 0:
+        if it % args.summary_writer_freq == 0:
             uncropped_images = copy.deepcopy(images)
         
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
             
-            if it % 200 == 0:
-                # summary_writer.write_image_grid(tag="uncropped images", images=uncropped_images, global_step=it)
+            if it % args.summary_writer_freq == 0:
                 summary_writer.write_image_grid(tag="global view 1", images=images[0], original_images=uncropped_images, global_step=it)
                 summary_writer.write_image_grid(tag="global view 2", images=images[1], original_images=uncropped_images, global_step=it)
                 summary_writer.write_image_grid(tag="local view 1", images=images[2], original_images=uncropped_images, global_step=it)
@@ -618,11 +619,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if args.use_rpn_optimizer:
                 rpn_optimizer.step()
 
-            if it % 200 == 0:
-                # print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+            if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 print("--------------------------------------------------------")
-                # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
@@ -646,23 +645,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
             fp16_scaler.update()
             
-            if it % 200 == 0:
-                # print(rpn.module.transform_net.localization_net.backbone.fc.weight)
+            if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 print("--------------------------------------------------------")
-                # print(rpn.module.transform_net.localization_net.backbone.fc.weight.grad)
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
-
-            # prints currently alive Tensors and Variables
-            # import gc
-            # for obj in gc.get_objects():
-            #     try:
-            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-            #             print(type(obj), obj.size())
-            #     except:
-            #         pass
 
         # EMA update for the teacher
         with torch.no_grad():
@@ -671,7 +659,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
 
         # images = [im.detach() for im in images]
-        del images
+        # del images
         
         # logging
         torch.cuda.synchronize()
