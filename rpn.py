@@ -146,6 +146,13 @@ class STN(nn.Module):
         self.stn_n_params = N_PARAMS[stn_mode]
         self.invert_rpn_gradients = invert_rpn_gradients
 
+        self.activation = {}
+        # Spatial transformer localization-network
+        self.localization_net = ResNetRPN(backbone="resnet18", out_dim=256, invert_rpn_gradients=invert_rpn_gradients)
+
+        # print(self.localization_net)
+        self.localization_net.register_forward_hook(hook=get_activation('avgpool', activation=self.activation))  # output is detached
+
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
         self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode)
@@ -253,9 +260,28 @@ class STN(nn.Module):
         
         return theta_new
     
-    def forward(self, loc_img_features, orig_images):
-        if self.invert_rpn_gradients:
-            loc_img_features = grad_reverse(loc_img_features)
+    def forward(self, imgs):
+        feature_maps = []
+        with torch.no_grad():
+            for img in imgs:
+                img = torch.unsqueeze(img, 0)
+                try:
+                    if img.size(2) > 800 or img.size(3) > 800:
+                            img = resize(img, size=800, max_size=801)
+                except Exception as e:
+                    print(e)
+    
+                # if self.invert_rpn_gradients:
+                #     img = grad_reverse(img)
+    
+                self.localization_net(img)
+                feature_map = torch.squeeze(self.activation['avgpool'], 0)
+                feature_maps.append(feature_map)
+    
+            loc_img_features = torch.stack(feature_maps, 0)
+        
+        # if self.invert_rpn_gradients:
+        #     loc_img_features = grad_reverse(loc_img_features)
 
         theta_g1 = self.fc_localization_global1(loc_img_features)
         theta_g2 = self.fc_localization_global2(loc_img_features)
@@ -273,12 +299,12 @@ class STN(nn.Module):
 
         global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
 
-        gridg1 = F.affine_grid(theta_g1, size=[len(orig_images), 3, 224, 224])
-        gridg2 = F.affine_grid(theta_g2, size=[len(orig_images), 3, 224, 224])
-        gridl1 = F.affine_grid(theta_l1, size=[len(orig_images), 3, 96, 96])
-        gridl2 = F.affine_grid(theta_l2, size=[len(orig_images), 3, 96, 96])
+        gridg1 = F.affine_grid(theta_g1, size=[len(imgs), 3, 224, 224])
+        gridg2 = F.affine_grid(theta_g2, size=[len(imgs), 3, 224, 224])
+        gridl1 = F.affine_grid(theta_l1, size=[len(imgs), 3, 96, 96])
+        gridl2 = F.affine_grid(theta_l2, size=[len(imgs), 3, 96, 96])
         
-        for i, orig_image in enumerate(orig_images):
+        for i, orig_image in enumerate(imgs):
             orig_image = torch.unsqueeze(orig_image, 0)
             grid_g1 = torch.unsqueeze(gridg1[i], 0)
             grid_g2 = torch.unsqueeze(gridg2[i], 0)
@@ -303,12 +329,6 @@ class AugmentationNetwork(nn.Module):
         super().__init__()
         print("Initializing Augmentation Network")
 
-        self.activation = {}
-        # Spatial transformer localization-network
-        self.localization_net = ResNetRPN(backbone="resnet18", out_dim=256, invert_rpn_gradients=invert_rpn_gradients)
-        
-        # print(self.localization_net)
-        self.localization_net.register_forward_hook(hook=get_activation('avgpool', activation=self.activation))  # output is detached
         self.stn = STN(stn_mode, invert_rpn_gradients)
         
         self.normalize = transforms.Compose(
@@ -319,44 +339,5 @@ class AugmentationNetwork(nn.Module):
             )
         
     def forward(self, imgs):
-        # global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
-        feature_maps = []
-        
-        # since we have list of images with varying resolution, we need to transform them individually
-        for img in imgs:
-            img = torch.unsqueeze(img, 0)
-            try:
-                if img.size(2) > 800 or img.size(3) > 800:
-                        img = resize(img, size=800, max_size=801)
-            except Exception as e:
-                print(e)
-        
-            if self.stn.invert_rpn_gradients:
-                img = grad_reverse(img)
-
-            self.localization_net(img)
-            feature_map = torch.squeeze(self.activation['avgpool'], 0)
-            feature_maps.append(feature_map)
-        
-        img_features = torch.stack(feature_maps, 0)
-        global_local_views = self.stn(img_features, imgs)
-        
+        global_local_views = self.stn(imgs)
         return global_local_views
-        #     global_local_views = self.transform_net(img)
-        #     g1_augmented = torch.squeeze(global_local_views[0], 0)
-        #     g2_augmented = torch.squeeze(global_local_views[1], 0)
-        #     l1_augmented = torch.squeeze(global_local_views[2], 0)
-        #     l2_augmented = torch.squeeze(global_local_views[3], 0)
-        #
-        #     global_views1_augmented.append(g1_augmented)
-        #     global_views2_augmented.append(g2_augmented)
-        #     local_views1_augmented.append(l1_augmented)
-        #     local_views2_augmented.append(l2_augmented)
-        #
-        # global_views1 = torch.stack(global_views1_augmented, 0)
-        # global_views2 = torch.stack(global_views2_augmented, 0)
-        # local_views1 = torch.stack(local_views1_augmented, 0)
-        # local_views2 = torch.stack(local_views2_augmented, 0)
-
-        # return [global_views1, global_views2, local_views1, local_views2]
-    

@@ -337,7 +337,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
         
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
-    rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu], find_unused_parameters=True)
+    rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu])
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
@@ -377,7 +377,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     rpn_optimizer = None
 
     # freeze localization net weights
-    for param in rpn.module.localization_net.parameters():
+    # for param in rpn.module.stn.parameters():
+    for param in rpn.module.stn.localization_net.parameters():
         param.requires_grad = False
     
     if args.optimizer == "adamw":
