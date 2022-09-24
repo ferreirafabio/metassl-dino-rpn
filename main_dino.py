@@ -568,9 +568,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if args.use_rpn_optimizer:
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
-
-        # print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-        # print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
         
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
@@ -621,8 +618,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+                if args.separate_localization_net:
+                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
+                else:
+                    print(rpn.module.transform_net.localization_net.conv2d_2.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+                if args.separate_localization_net:
+                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
+                else:
+                    print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
@@ -634,10 +639,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
                 
-            # for name, param in rpn.module.backbone.localization.named_parameters():
-            #     if param.requires_grad:
-            #         print(name)
-            
             fp16_scaler.step(optimizer)
             
             if args.use_rpn_optimizer:
@@ -647,8 +648,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+                if args.separate_localization_net:
+                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
+                else:
+                    print(rpn.module.transform_net.localization_net.conv2d_2.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+                if args.separate_localization_net:
+                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
+                else:
+                    print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
                 print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
                 print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
@@ -657,9 +666,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             m = momentum_schedule[it]  # momentum parameter
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-
-        # images = [im.detach() for im in images]
-        # del images
         
         # logging
         torch.cuda.synchronize()
