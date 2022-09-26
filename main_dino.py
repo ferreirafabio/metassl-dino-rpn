@@ -581,10 +581,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             images = rpn(images)
             
             if it % args.summary_writer_freq == 0:
-                summary_writer.write_image_grid(tag="global view 1", images=images[0], original_images=uncropped_images, global_step=it)
-                summary_writer.write_image_grid(tag="global view 2", images=images[1], original_images=uncropped_images, global_step=it)
-                summary_writer.write_image_grid(tag="local view 1", images=images[2], original_images=uncropped_images, global_step=it)
-                summary_writer.write_image_grid(tag="local view 2", images=images[3], original_images=uncropped_images, global_step=it)
+                summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
+                # summary_writer.write_image_grid(tag="global view 1", images=images[0], original_images=uncropped_images, global_step=it)
+                # summary_writer.write_image_grid(tag="global view 2", images=images[1], original_images=uncropped_images, global_step=it)
+                # summary_writer.write_image_grid(tag="local view 1", images=images[2], original_images=uncropped_images, global_step=it)
+                # summary_writer.write_image_grid(tag="local view 2", images=images[3], original_images=uncropped_images, global_step=it)
                 uncropped_images = None
             
             # continue

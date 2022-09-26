@@ -323,13 +323,6 @@ class AugmentationNetwork(nn.Module):
         print("Initializing Augmentation Network")
         self.transform_net = transform_net
 
-        self.normalize = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-                ]
-            )
-
     def forward(self, imgs):
         global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
         
@@ -360,11 +353,6 @@ class AugmentationNetwork(nn.Module):
         global_views2 = torch.stack(global_views2_augmented, 0)
         local_views1 = torch.stack(local_views1_augmented, 0)
         local_views2 = torch.stack(local_views2_augmented, 0)
-
-        # del global_views1_augmented
-        # del global_views2_augmented
-        # del local_views1_augmented
-        # del local_views2_augmented
 
         return [global_views1, global_views2, local_views1, local_views2]
     

@@ -887,7 +887,7 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
 
 
-def image_grid(images, original_images, batch_size=16):
+def image_grid(images, original_images, epoch, batch_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(25, 20))
@@ -899,35 +899,43 @@ def image_grid(images, original_images, batch_size=16):
     merged[::2] = images
     merged[1::2] = original_images
 
-    for i in range(batch_size*2):
-        # Start next subplot.
-        # true_label = "true:" + str(int(np.argmax(true_labels[i])))
-        # pred_label = " pred:" + str(int(np.argmax(pred_labels[i])))
-        # title = true_label + pred_label
-        # plt.subplot(8, 4, i + 1, title=title)  # todo: support higher batch sizes
-        plt.subplot(8, 4, i + 1)  # todo: support higher batch sizes
-        plt.xticks([])
-        plt.yticks([])
-        plt.grid(False)
-        
-        img = merged[i].cpu().detach().numpy()
-        #
-        # if i == 0 or i % 2 == 0:
-        #     img = images[i].cpu().detach().numpy()
-        # else:
-        #     img = original_images[i].cpu().detach().numpy()
+    g1 = images[0]
+    g2 = images[1]
+    l1 = images[2]
+    l2 = images[3]
+    
+    titles = [f"orig@{epoch} epoch", "global 1", "global 2", "local 1", "local 2"]
+    
+    # for i in range(batch_size*2):
+    for i, (orig_img, g1_img, g2_img, l1_img, l2_img) in enumerate(zip(original_images, g1, g2, l1, l2), 1):
+        all_images = [orig_img, g1_img, g2_img, l1_img, l2_img]
+        for j in range(5):
+            # Start next subplot.
+            # true_label = "true:" + str(int(np.argmax(true_labels[i])))
+            # pred_label = " pred:" + str(int(np.argmax(pred_labels[i])))
+            # title = true_label + pred_label
+            # plt.subplot(8, 4, i + 1, title=title)  # todo: support higher batch sizes
+            plt.subplot(16, 5, i*j + 1, title=titles[j])  # todo: support higher batch sizes
+            plt.xticks([])
+            plt.yticks([])
+            plt.grid(False)
             
-        if img.shape[0] == 3:
-            # CIFAR100 and ImageNet case
-            img = np.moveaxis(img, 0, -1)
-        else:
-            # MNIST case
-            img = img.squeeze()
+            # img = merged[i].cpu().detach().numpy()
+            img = all_images[j]
+            # if i == 0 or i % 2 == 0:
+            #     img = images[i].cpu().detach().numpy()
+            # else:
+            #     img = original_images[i].cpu().detach().numpy()
             
-        plt.imshow(img)
-
-        # plt.imshow(img, norm=norm_red_green(), cmap=cmap_black_white())
-        # plt.imshow(images[i].cpu().detach().numpy().squeeze(), cmap=plt.cm.binary)
+            if img.shape[0] == 3:
+                # CIFAR100 and ImageNet case
+                img = np.moveaxis(img, 0, -1)
+            else:
+                # MNIST case
+                img = img.squeeze()
+                
+            plt.imshow(img)
+    
     return figure
 
 
@@ -937,8 +945,8 @@ class SummaryWriterCustom(SummaryWriter):
         self.batch_size = batch_size
         self.writer = SummaryWriter(out_path)
 
-    def write_image_grid(self, tag, images, original_images, global_step):
-        fig = image_grid(images=images, original_images=original_images, batch_size=self.batch_size)
+    def write_image_grid(self, tag, images, original_images, epoch, global_step):
+        fig = image_grid(images=images, original_images=original_images, epoch=epoch, batch_size=self.batch_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
 
     def add_scalar(self, tag, scalar_value, global_step):
