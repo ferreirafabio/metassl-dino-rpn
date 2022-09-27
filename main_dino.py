@@ -580,7 +580,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
             
-            if it % args.summary_writer_freq == 0:
+            if it % args.summary_writer_freq == 0  and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
                 # summary_writer.write_image_grid(tag="global view 1", images=images[0], original_images=uncropped_images, global_step=it)
                 # summary_writer.write_image_grid(tag="global view 2", images=images[1], original_images=uncropped_images, global_step=it)

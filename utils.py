@@ -890,15 +890,14 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
 def image_grid(images, original_images, epoch, batch_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
-    figure = plt.figure(figsize=(25, 20))
+    figure = plt.figure(figsize=(30, 50))
+    figure.tight_layout()
 
-    images = list(images)
+    plt.subplots_adjust(hspace=0.5)
+    # plt.subplots_adjust(hspace=None)
+    # images = list(images)
     # original_images = list(original_images)
-    
-    merged = [None]*(len(images)+len(original_images))
-    merged[::2] = images
-    merged[1::2] = original_images
-
+        
     g1 = images[0]
     g2 = images[1]
     l1 = images[2]
@@ -906,27 +905,23 @@ def image_grid(images, original_images, epoch, batch_size=16):
     
     titles = [f"orig@{epoch} epoch", "global 1", "global 2", "local 1", "local 2"]
     
-    # for i in range(batch_size*2):
-    for i, (orig_img, g1_img, g2_img, l1_img, l2_img) in enumerate(zip(original_images, g1, g2, l1, l2), 1):
+    total = 0
+    for i, orig_img in enumerate(original_images, 1):
+        g1_img = g1[i - 1]
+        g2_img = g2[i - 1]
+        l1_img = l1[i - 1]
+        l2_img = l2[i - 1]
         all_images = [orig_img, g1_img, g2_img, l1_img, l2_img]
-        for j in range(5):
-            # Start next subplot.
-            # true_label = "true:" + str(int(np.argmax(true_labels[i])))
-            # pred_label = " pred:" + str(int(np.argmax(pred_labels[i])))
-            # title = true_label + pred_label
-            # plt.subplot(8, 4, i + 1, title=title)  # todo: support higher batch sizes
-            plt.subplot(16, 5, i*j + 1, title=titles[j])  # todo: support higher batch sizes
+        for j in range(1, 6):
+            total += 1
+
+            plt.subplot(16, 5, total, title=titles[j-1])  # todo: support higher batch sizes
             plt.xticks([])
             plt.yticks([])
             plt.grid(False)
             
-            # img = merged[i].cpu().detach().numpy()
-            img = all_images[j]
-            # if i == 0 or i % 2 == 0:
-            #     img = images[i].cpu().detach().numpy()
-            # else:
-            #     img = original_images[i].cpu().detach().numpy()
-            
+            img = all_images[j-1].cpu().detach().numpy()
+
             if img.shape[0] == 3:
                 # CIFAR100 and ImageNet case
                 img = np.moveaxis(img, 0, -1)
