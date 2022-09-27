@@ -24,6 +24,7 @@ import math
 import random
 import datetime
 import subprocess
+import seaborn as sns
 from collections import defaultdict, deque
 
 import numpy as np
@@ -890,14 +891,14 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
 def image_grid(images, original_images, epoch, batch_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
-    figure = plt.figure(figsize=(30, 50))
+    figure = plt.figure(figsize=(20, 50))
     figure.tight_layout()
 
     plt.subplots_adjust(hspace=0.5)
     # plt.subplots_adjust(hspace=None)
     # images = list(images)
     # original_images = list(original_images)
-        
+    
     g1 = images[0]
     g2 = images[1]
     l1 = images[2]
@@ -934,6 +935,14 @@ def image_grid(images, original_images, epoch, batch_size=16):
     return figure
 
 
+def theta_heatmap(theta, epoch):
+    figure, ax = plt.subplots()
+    # figure.tight_layout()
+    sns.heatmap(theta[0], annot=True)
+    ax.set_title(f'Theta @ {epoch} epoch')
+    return figure
+
+
 class SummaryWriterCustom(SummaryWriter):
     def __init__(self, out_path, batch_size):
         # super().__init__()
@@ -943,7 +952,11 @@ class SummaryWriterCustom(SummaryWriter):
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
         fig = image_grid(images=images, original_images=original_images, epoch=epoch, batch_size=self.batch_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
-
+        
+    def write_theta_heatmap(self, tag, theta, epoch, global_step):
+        fig = theta_heatmap(theta, epoch)
+        self.writer.add_figure(tag, fig, global_step=global_step)
+    
     def add_scalar(self, tag, scalar_value, global_step):
         self.writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
 

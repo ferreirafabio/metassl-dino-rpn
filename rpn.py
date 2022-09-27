@@ -102,14 +102,13 @@ class LocalizationNet(nn.Module):
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.avgpool = nn.AdaptiveAvgPool2d((16, 16))
-        self.relu = nn.ReLU(True)
         
     def forward(self, x):
         if self.invert_gradients:
             x = grad_reverse(x)
             
-        x = self.maxpool2d(F.relu(self.conv2d_1(x)))
-        x = self.avgpool(F.relu(self.conv2d_2(x)))
+        x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
+        x = self.avgpool(F.leaky_relu(self.conv2d_2(x)))
         return x
 
 
@@ -119,8 +118,9 @@ class LocHead(nn.Module):
         
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
-        
-        self.linear1 = nn.Linear(16*16*conv2_depth, 64)
+
+        self.linear0 = nn.Linear(16 * 16 * conv2_depth, 256)
+        self.linear1 = nn.Linear(256, 64)
         self.linear2 = nn.Linear(64, self.stn_n_params)
     
     def forward(self, x):
@@ -128,7 +128,8 @@ class LocHead(nn.Module):
             x = grad_reverse(x)
         
         x = torch.flatten(x, 1)
-        x = F.relu(self.linear1(x))
+        x = F.leaky_relu(self.linear0(x))
+        x = F.leaky_relu(self.linear1(x))
         x = self.linear2(x)
         return x
     
@@ -143,6 +144,10 @@ class STN(nn.Module):
         self.stn_n_params = N_PARAMS[stn_mode]
         self.invert_rpn_gradients = invert_rpn_gradients
         self.separate_localization_net = separate_localization_net
+        self.affine_matrix_g1 = None
+        self.affine_matrix_g2 = None
+        self.affine_matrix_l1 = None
+        self.affine_matrix_l2 = None
         
         # Spatial transformer localization-network
         # self.localization_net = ResNetRPN(backbone=backbone, out_dim=256, invert_rpn_gradients=invert_rpn_gradients)
@@ -297,6 +302,11 @@ class STN(nn.Module):
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features)
             theta_l1 = self._get_stn_mode_theta(theta_l1, x_loc_features)
             theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features)
+        
+        self.affine_matrix_g1 = theta_g1.cpu().detach().numpy()
+        self.affine_matrix_g2 = theta_g2.cpu().detach().numpy()
+        self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
+        self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
         # print(f"theta g1: {theta_g1}")
         # print(f"theta g2: {theta_g2}")
         # print(f"theta l1: {theta_l1}")
