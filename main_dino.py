@@ -586,6 +586,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 summary_writer.write_theta_heatmap(tag="theta_g2", theta=rpn.module.transform_net.affine_matrix_g2, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_l1", theta=rpn.module.transform_net.affine_matrix_l1, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_l2", theta=rpn.module.transform_net.affine_matrix_l2, epoch=epoch, global_step=it)
+            
+                theta_g_euc_norm = np.linalg.norm(np.double(rpn.module.transform_net.affine_matrix_g2[0] - rpn.module.transform_net.affine_matrix_g1[0]), 2)
+                theta_l_euc_norm = np.linalg.norm(np.double(rpn.module.transform_net.affine_matrix_l2[0] - rpn.module.transform_net.affine_matrix_l1[0]), 2)
+                summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm, global_step=it)
+                summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm, global_step=it)
+    
                 uncropped_images = None
             
             # continue

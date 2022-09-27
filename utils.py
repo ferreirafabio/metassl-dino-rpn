@@ -957,7 +957,7 @@ class SummaryWriterCustom(SummaryWriter):
         fig = theta_heatmap(theta, epoch)
         self.writer.add_figure(tag, fig, global_step=global_step)
     
-    def add_scalar(self, tag, scalar_value, global_step):
+    def write_scalar(self, tag, scalar_value, global_step):
         self.writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
 
     def close(self):
