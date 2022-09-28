@@ -101,7 +101,7 @@ class LocalizationNet(nn.Module):
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
-        self.avgpool = nn.AdaptiveAvgPool2d((16, 16))
+        self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
         
     def forward(self, x):
         if self.invert_gradients:
@@ -119,9 +119,9 @@ class LocHead(nn.Module):
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
 
-        self.linear0 = nn.Linear(16 * 16 * conv2_depth, 256)
-        self.linear1 = nn.Linear(256, 64)
-        self.linear2 = nn.Linear(64, self.stn_n_params)
+        self.linear0 = nn.Linear(8 * 8 * conv2_depth, 64)
+        self.linear1 = nn.Linear(64, 32)
+        self.linear2 = nn.Linear(32, self.stn_n_params)
     
     def forward(self, x):
         if self.invert_gradients:
