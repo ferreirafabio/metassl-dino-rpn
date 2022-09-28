@@ -364,5 +364,10 @@ class AugmentationNetwork(nn.Module):
         local_views1 = torch.stack(local_views1_augmented, 0)
         local_views2 = torch.stack(local_views2_augmented, 0)
 
+        del global_views1_augmented
+        del global_views2_augmented
+        del local_views1_augmented
+        del local_views2_augmented
+
         return [global_views1, global_views2, local_views1, local_views2]
     
