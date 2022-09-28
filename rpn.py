@@ -94,7 +94,7 @@ class ResNetRPN(nn.Module):
     
     
 class LocalizationNet(nn.Module):
-    def __init__(self, invert_gradients, conv1_depth=32, conv2_depth=16):
+    def __init__(self, invert_gradients, conv1_depth=16, conv2_depth=24):
         super().__init__()
         
         self.invert_gradients = invert_gradients
@@ -119,8 +119,8 @@ class LocHead(nn.Module):
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
 
-        self.linear0 = nn.Linear(8 * 8 * conv2_depth, 64)
-        self.linear1 = nn.Linear(64, 32)
+        self.linear0 = nn.Linear(8 * 8 * conv2_depth, 128)
+        self.linear1 = nn.Linear(128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
     def forward(self, x):
@@ -340,8 +340,8 @@ class AugmentationNetwork(nn.Module):
         for img in imgs:
             img = torch.unsqueeze(img, 0)
             try:
-                if img.size(2) > 800 or img.size(3) > 800:
-                        img = resize(img, size=800, max_size=801)
+                if img.size(2) > 700 or img.size(3) > 700:
+                        img = resize(img, size=700, max_size=701)
             except Exception as e:
                 print(e)
         
