@@ -152,8 +152,8 @@ class STN(nn.Module):
         # Spatial transformer localization-network
         # self.localization_net = ResNetRPN(backbone=backbone, out_dim=256, invert_rpn_gradients=invert_rpn_gradients)
         if self.separate_localization_net:
-            conv1_depth = 8
-            conv2_depth = 4
+            conv1_depth = 16
+            conv2_depth = 8
             self.localization_net_g1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
             self.localization_net_g2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
             self.localization_net_l1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
