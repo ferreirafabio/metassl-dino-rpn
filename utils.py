@@ -73,6 +73,15 @@ class Solarization(nn.Module):
             return img
 
 
+def load_rpn_pretrained_weights(model, pretrained_weights):
+    if os.path.isfile(pretrained_weights):
+        state_dict = torch.load(pretrained_weights, map_location="cpu")
+        # remove `module.` prefix
+        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        msg = model.load_state_dict(state_dict, strict=False)
+        print('RPN Pretrained weights found at {} and loaded with msg: {}'.format(pretrained_weights, msg))
+
+
 def load_pretrained_weights(model, pretrained_weights, checkpoint_key, model_name, patch_size):
     if os.path.isfile(pretrained_weights):
         state_dict = torch.load(pretrained_weights, map_location="cpu")

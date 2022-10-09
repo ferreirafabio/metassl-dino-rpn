@@ -148,12 +148,13 @@ def get_args_parser():
                                                                          "annealed with cosine and no warmup")
     parser.add_argument('--stn_mode', default='affine', type=str, help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
                                                                        'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
-    parser.add_argument("--rpnlr", default=1e-3, type=float, help="""Learning rate at the end of
+    parser.add_argument("--rpnlr", default=1e-4, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag, help="Set this flag to use a separate localization network for each head.")
-    parser.add_argument("--summary_writer_freq", default=2000, type=int, help="Defines the number of iterations the summary writer will write output.")
-    parser.add_argument("--grad_check_freq", default=2000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
+    parser.add_argument("--summary_writer_freq", default=4000, type=int, help="Defines the number of iterations the summary writer will write output.")
+    parser.add_argument("--grad_check_freq", default=4000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
+    parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
     
     return parser
 
@@ -377,18 +378,21 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     #         print(name)
     
     rpn_optimizer = None
+    pretrained_rpn = os.path.isfile(args.rpn_pretrained_weights)
+    if pretrained_rpn:
+        utils.load_rpn_pretrained_weights(rpn, args.rpn_pretrained_weights)
     
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
-        if args.use_rpn_optimizer:
+        if args.use_rpn_optimizer and not pretrained_rpn:
             rpn_optimizer = torch.optim.AdamW(list(rpn.parameters()))  # lr is set by scheduler
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
-        if args.use_rpn_optimizer:
+        if args.use_rpn_optimizer and not pretrained_rpn:
             rpn_optimizer = torch.optim.SGD(list(rpn.parameters()), lr=0)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
-        if args.use_rpn_optimizer:
+        if args.use_rpn_optimizer and not pretrained_rpn:
             rpn_optimizer = torch.optim.LARS(list(rpn.parameters()))  # lr is set by scheduler
         
     # for mixed precision training
@@ -410,7 +414,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     )
     
     rpn_lr_schedule = None
-    if rpn_optimizer:
+    if rpn_optimizer and not pretrained_rpn:
         rpn_lr_schedule = utils.cosine_scheduler(
             args.rpnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
@@ -467,7 +471,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,
-                epoch, fp16_scaler, rpn, args, summary_writer)
+                epoch, fp16_scaler, rpn, pretrained_rpn, args, summary_writer)
     
             # ============ writing logs ... ============
             save_dict = {
@@ -553,7 +557,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, rpn, args, summary_writer):
+                    fp16_scaler, rpn, pretrained_rpn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
@@ -565,7 +569,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
                 
-        if args.use_rpn_optimizer:
+        if args.use_rpn_optimizer and not pretrained_rpn:
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
         
@@ -603,7 +607,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
     
-        if args.use_rpn_optimizer:
+        if args.use_rpn_optimizer and not pretrained_rpn:
             rpn_optimizer.zero_grad()
     
         # student update
@@ -620,9 +624,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             optimizer.step()
             
-            if args.use_rpn_optimizer:
+            if args.use_rpn_optimizer and not pretrained_rpn:
                 rpn_optimizer.step()
 
+            # if it % args.grad_check_freq == 0 and not static_rpn:
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 if args.separate_localization_net:
@@ -648,11 +653,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
             fp16_scaler.step(optimizer)
             
-            if args.use_rpn_optimizer:
+            if args.use_rpn_optimizer and not pretrained_rpn:
                 fp16_scaler.step(rpn_optimizer)
                 
             fp16_scaler.update()
             
+            # if it % args.grad_check_freq == 0 and not pretrained_rpn:
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 if args.separate_localization_net:
@@ -680,7 +686,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        if args.use_rpn_optimizer:
+        if args.use_rpn_optimizer and not pretrained_rpn:
             metric_logger.update(lrrpn=rpn_optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
     
@@ -828,6 +834,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    
+    os.environ["NCCL_DEBUG"] = "INFO"
     
     # DINO run with NEPS
     if args.is_neps_run:
