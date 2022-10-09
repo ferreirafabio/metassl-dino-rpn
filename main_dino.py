@@ -152,8 +152,8 @@ def get_args_parser():
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag, help="Set this flag to use a separate localization network for each head.")
-    parser.add_argument("--summary_writer_freq", default=4000, type=int, help="Defines the number of iterations the summary writer will write output.")
-    parser.add_argument("--grad_check_freq", default=4000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
+    parser.add_argument("--summary_writer_freq", default=5000, type=int, help="Defines the number of iterations the summary writer will write output.")
+    parser.add_argument("--grad_check_freq", default=5000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
     parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
     
     return parser
@@ -381,7 +381,6 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         all_params = student_params + list(rpn.parameters())
         params_groups[1]['params'] = all_params
     
-    
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
         if args.use_rpn_optimizer and not use_pretrained_rpn:
@@ -453,7 +452,12 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             rpn=rpn,
             rpn_optimizer=rpn_optimizer,
         )
+        
     start_epoch = to_restore["epoch"]
+
+    if use_pretrained_rpn:
+        for p in rpn.parameters():
+            p.requires_grad = False
 
     summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
 
@@ -626,7 +630,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
             if args.use_rpn_optimizer and not use_pretrained_rpn:
                 rpn_optimizer.step()
-                print("rpn step done")
 
             # if it % args.grad_check_freq == 0 and not static_rpn:
             if it % args.grad_check_freq == 0:
