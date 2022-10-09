@@ -360,8 +360,17 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
+
+    # ============ handling RPN optimization ============
+    rpn_optimizer = None
+    use_pretrained_rpn = os.path.isfile(args.rpn_pretrained_weights)
+    if use_pretrained_rpn:
+        utils.load_rpn_pretrained_weights(rpn, args.rpn_pretrained_weights)
+
+        for p in rpn.parameters():
+            p.requires_grad = False
     
-    if not args.use_rpn_optimizer:
+    if not args.use_rpn_optimizer and not use_pretrained_rpn:
         # add to regularized param group
         # student_params = params_groups[0]['params']
         # all_params = student_params + list(rpn.parameters())
@@ -371,28 +380,19 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         student_params = params_groups[1]['params']
         all_params = student_params + list(rpn.parameters())
         params_groups[1]['params'] = all_params
-        
-    # print(list(rpn.parameters()))
-    # for name, param in rpn.named_parameters():
-    #     if param.requires_grad:
-    #         print(name)
     
-    rpn_optimizer = None
-    pretrained_rpn = os.path.isfile(args.rpn_pretrained_weights)
-    if pretrained_rpn:
-        utils.load_rpn_pretrained_weights(rpn, args.rpn_pretrained_weights)
     
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
-        if args.use_rpn_optimizer and not pretrained_rpn:
+        if args.use_rpn_optimizer and not use_pretrained_rpn:
             rpn_optimizer = torch.optim.AdamW(list(rpn.parameters()))  # lr is set by scheduler
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
-        if args.use_rpn_optimizer and not pretrained_rpn:
+        if args.use_rpn_optimizer and not use_pretrained_rpn:
             rpn_optimizer = torch.optim.SGD(list(rpn.parameters()), lr=0)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
-        if args.use_rpn_optimizer and not pretrained_rpn:
+        if args.use_rpn_optimizer and not use_pretrained_rpn:
             rpn_optimizer = torch.optim.LARS(list(rpn.parameters()))  # lr is set by scheduler
         
     # for mixed precision training
@@ -414,7 +414,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     )
     
     rpn_lr_schedule = None
-    if rpn_optimizer and not pretrained_rpn:
+    if rpn_optimizer and not use_pretrained_rpn:
         rpn_lr_schedule = utils.cosine_scheduler(
             args.rpnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
@@ -471,7 +471,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             # ============ training one epoch of DINO ... ============
             train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                 data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,
-                epoch, fp16_scaler, rpn, pretrained_rpn, args, summary_writer)
+                epoch, fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer)
     
             # ============ writing logs ... ============
             save_dict = {
@@ -557,7 +557,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, rpn, pretrained_rpn, args, summary_writer):
+                    fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     
@@ -569,7 +569,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
                 
-        if args.use_rpn_optimizer and not pretrained_rpn:
+        if args.use_rpn_optimizer and not use_pretrained_rpn:
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
         
@@ -607,7 +607,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
     
-        if args.use_rpn_optimizer and not pretrained_rpn:
+        if args.use_rpn_optimizer and not use_pretrained_rpn:
             rpn_optimizer.zero_grad()
     
         # student update
@@ -624,8 +624,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             optimizer.step()
             
-            if args.use_rpn_optimizer and not pretrained_rpn:
+            if args.use_rpn_optimizer and not use_pretrained_rpn:
                 rpn_optimizer.step()
+                print("rpn step done")
 
             # if it % args.grad_check_freq == 0 and not static_rpn:
             if it % args.grad_check_freq == 0:
@@ -653,7 +654,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
             fp16_scaler.step(optimizer)
             
-            if args.use_rpn_optimizer and not pretrained_rpn:
+            if args.use_rpn_optimizer and not use_pretrained_rpn:
                 fp16_scaler.step(rpn_optimizer)
                 
             fp16_scaler.update()
@@ -686,7 +687,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        if args.use_rpn_optimizer and not pretrained_rpn:
+        if args.use_rpn_optimizer and not use_pretrained_rpn:
             metric_logger.update(lrrpn=rpn_optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
     
