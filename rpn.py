@@ -181,10 +181,10 @@ class STN(nn.Module):
                 self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep=self.deep_loc_net)
-        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
-        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
-        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
+        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
         
         # Initialize the weights/bias with identity transformation
         self.fc_localization_global1.linear2.weight.data.zero_()
