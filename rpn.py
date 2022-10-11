@@ -94,7 +94,7 @@ class ResNetRPN(nn.Module):
 
     
 class LocalizationNet(nn.Module):
-    def __init__(self, invert_gradients, conv1_depth=32, conv2_depth=16, deep=False):
+    def __init__(self, invert_gradients, conv1_depth=16, conv2_depth=32, deep=False):
         super().__init__()
         
         self.deep = deep
@@ -102,8 +102,8 @@ class LocalizationNet(nn.Module):
         self.invert_gradients = invert_gradients
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
-        self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
-        self.conv2d_deep = nn.Conv2d(conv2_depth, conv2_depth, kernel_size=3, padding=2)
+        self.conv2d_deep = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
+        self.conv2d_2 = nn.Conv2d(conv2_depth if deep else conv1_depth, conv2_depth, kernel_size=3, padding=2)
         if self.deep:
             self.avgpool = nn.AdaptiveAvgPool2d((32, 32))
         else:
@@ -171,7 +171,7 @@ class STN(nn.Module):
             conv2_depth = 16
             
             if deep_loc_net:
-                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=64, conv2_depth=32, deep=self.deep_loc_net)
+                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=32, conv2_depth=64, deep=self.deep_loc_net)
             else:
                 self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
 
