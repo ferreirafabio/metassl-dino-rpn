@@ -105,7 +105,7 @@ class LocalizationNet(nn.Module):
         self.conv2d_deep = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.conv2d_2 = nn.Conv2d(conv2_depth if deep else conv1_depth, conv2_depth, kernel_size=3, padding=2)
         if self.deep:
-            self.avgpool = nn.AdaptiveAvgPool2d((32, 32))
+            self.avgpool = nn.AdaptiveAvgPool2d((16, 16))
         else:
             self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
         
@@ -172,7 +172,7 @@ class STN(nn.Module):
             self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
             if deep_loc_net:
-                conv1_depth = 32
+                conv1_depth = 24
                 conv2_depth = 64
                 self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=self.deep_loc_net)
             else:
