@@ -166,10 +166,13 @@ class STN(nn.Module):
             self.localization_net_l1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
             self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
+            conv1_depth = 32
+            conv2_depth = 16
+            
             if deep_loc_net:
                 self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=64, conv2_depth=32, deep=self.deep_loc_net)
             else:
-                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=32, conv2_depth=16, deep=False)
+                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
 
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
