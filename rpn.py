@@ -103,12 +103,10 @@ class LocalizationNet(nn.Module):
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
         if self.deep:
-            self.conv2d_deep = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
-        self.conv2d_2 = nn.Conv2d(conv2_depth if deep else conv1_depth, conv2_depth, kernel_size=3, padding=2)
-        if self.deep:
-            self.avgpool = nn.AdaptiveAvgPool2d((16, 16))
-        else:
-            self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
+            self.conv2d_deep = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
+            
+        self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
+        self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
         
     def forward(self, x):
         if self.invert_gradients:
@@ -116,6 +114,7 @@ class LocalizationNet(nn.Module):
             
         x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
         if self.deep:
+            x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
             x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
         x = self.avgpool(F.leaky_relu(self.conv2d_2(x)))
         return x
@@ -129,11 +128,8 @@ class LocHead(nn.Module):
         self.stn_n_params = N_PARAMS[stn_mode]
         self.deep_loc_net = deep_loc_net
         
-        if self.deep_loc_net:
-            self.linear0 = nn.Linear(16 * 16 * conv2_depth, 128)
-        else:
-            self.linear0 = nn.Linear(8 * 8 * conv2_depth, 128)
-        self.linear1 = nn.Linear(128, 32)
+        self.linear0 = nn.Linear(8 * 8 * conv2_depth, 256 if deep_loc_net else 128)
+        self.linear1 = nn.Linear(256 if deep_loc_net else 128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
     def forward(self, x):
@@ -173,7 +169,7 @@ class STN(nn.Module):
             self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
             if deep_loc_net:
-                conv1_depth = 24
+                conv1_depth = 32
                 conv2_depth = 64
                 self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=self.deep_loc_net)
             else:
