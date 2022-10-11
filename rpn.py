@@ -129,7 +129,7 @@ class LocHead(nn.Module):
         self.deep_loc_net = deep_loc_net
         
         if self.deep_loc_net:
-            self.linear0 = nn.Linear(32 * 32 * conv2_depth, 128)
+            self.linear0 = nn.Linear(16 * 16 * conv2_depth, 128)
         else:
             self.linear0 = nn.Linear(8 * 8 * conv2_depth, 128)
         self.linear1 = nn.Linear(128, 32)
