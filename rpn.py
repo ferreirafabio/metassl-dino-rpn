@@ -91,23 +91,30 @@ class ResNetRPN(nn.Module):
             
         x = self.backbone(x)
         return x
-    
+
     
 class LocalizationNet(nn.Module):
-    def __init__(self, invert_gradients, conv1_depth=16, conv2_depth=24):
+    def __init__(self, invert_gradients, conv1_depth=32, conv2_depth=16, deep=False):
         super().__init__()
+        
+        self.deep = deep
         
         self.invert_gradients = invert_gradients
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
-        self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
+        if self.deep:
+            self.avgpool = nn.AdaptiveAvgPool2d((32, 32))
+        else:
+            self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
         
     def forward(self, x):
         if self.invert_gradients:
             x = grad_reverse(x)
             
         x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
+        if self.deep:
+            x = self.maxpool2d(F.leaky_relu(self.conv2d_2(x)))
         x = self.avgpool(F.leaky_relu(self.conv2d_2(x)))
         return x
 
@@ -138,19 +145,19 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, backbone="resnet18", stn_mode='affine', invert_rpn_gradients=False, separate_localization_net=False):
+    def __init__(self, backbone="resnet18", stn_mode='affine', invert_rpn_gradients=False, separate_localization_net=False, deep_loc_net=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
         self.invert_rpn_gradients = invert_rpn_gradients
         self.separate_localization_net = separate_localization_net
+        self.deep_loc_net = deep_loc_net
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None
         self.affine_matrix_l1 = None
         self.affine_matrix_l2 = None
         
         # Spatial transformer localization-network
-        # self.localization_net = ResNetRPN(backbone=backbone, out_dim=256, invert_rpn_gradients=invert_rpn_gradients)
         if self.separate_localization_net:
             conv1_depth = 16
             conv2_depth = 8
@@ -159,9 +166,10 @@ class STN(nn.Module):
             self.localization_net_l1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
             self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
-            conv1_depth = 32
-            conv2_depth = 16
-            self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
+            if deep_loc_net:
+                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=64, conv2_depth=32, deep=self.deep_loc_net)
+            else:
+                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=32, conv2_depth=16, deep=False)
 
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
