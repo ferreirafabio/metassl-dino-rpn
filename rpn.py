@@ -103,6 +103,7 @@ class LocalizationNet(nn.Module):
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
+        self.conv2d_deep = nn.Conv2d(conv2_depth, conv2_depth, kernel_size=3, padding=2)
         if self.deep:
             self.avgpool = nn.AdaptiveAvgPool2d((32, 32))
         else:
@@ -114,7 +115,7 @@ class LocalizationNet(nn.Module):
             
         x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
         if self.deep:
-            x = self.maxpool2d(F.leaky_relu(self.conv2d_2(x)))
+            x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
         x = self.avgpool(F.leaky_relu(self.conv2d_2(x)))
         return x
 
