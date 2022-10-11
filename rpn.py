@@ -121,13 +121,17 @@ class LocalizationNet(nn.Module):
 
 
 class LocHead(nn.Module):
-    def __init__(self, invert_gradients, stn_mode, conv2_depth):
+    def __init__(self, invert_gradients, stn_mode, conv2_depth, deep_loc_net=False):
         super().__init__()
         
         self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
-
-        self.linear0 = nn.Linear(8 * 8 * conv2_depth, 128)
+        self.deep_loc_net = deep_loc_net
+        
+        if self.deep_loc_net:
+            self.linear0 = nn.Linear(32 * 32 * conv2_depth, 128)
+        else:
+            self.linear0 = nn.Linear(8 * 8 * conv2_depth, 128)
         self.linear1 = nn.Linear(128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
@@ -167,16 +171,17 @@ class STN(nn.Module):
             self.localization_net_l1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
             self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
-            conv1_depth = 32
-            conv2_depth = 16
-            
             if deep_loc_net:
-                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=32, conv2_depth=64, deep=self.deep_loc_net)
+                conv1_depth = 32
+                conv2_depth = 64
+                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=self.deep_loc_net)
             else:
+                conv1_depth = 32
+                conv2_depth = 16
                 self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
+        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep=self.deep_loc_net)
         self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
         self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
         self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth)
