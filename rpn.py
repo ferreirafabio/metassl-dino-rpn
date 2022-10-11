@@ -102,7 +102,8 @@ class LocalizationNet(nn.Module):
         self.invert_gradients = invert_gradients
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
-        self.conv2d_deep = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
+        if self.deep:
+            self.conv2d_deep = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.conv2d_2 = nn.Conv2d(conv2_depth if deep else conv1_depth, conv2_depth, kernel_size=3, padding=2)
         if self.deep:
             self.avgpool = nn.AdaptiveAvgPool2d((16, 16))
