@@ -18,7 +18,7 @@ import datetime
 import time
 import math
 import json
-import neps
+# import neps
 import logging
 from pathlib import Path
 import pickle
@@ -840,7 +840,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     
-    # os.environ["NCCL_DEBUG"] = "INFO"
+    os.environ["NCCL_DEBUG"] = "INFO"
     
     # DINO run with NEPS
     if args.is_neps_run:
