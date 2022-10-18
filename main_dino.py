@@ -521,6 +521,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 else:
                     print(rpn.module.transform_net.localization_net.conv2d_2.weight)
                 print("--------------------------------------------------------")
+                print("remove afterwards--------------------------")
+                torch.distributed.barrier()
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 
                 if args.test_mode:
@@ -538,9 +540,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     student_output = student(images_test_mode)
                     loss = dino_loss(student_output, teacher_output, epoch)
                     loss.backward()
-                    print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-
+                    
                     torch.distributed.barrier()
+                    print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                     not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                     print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
                     break
