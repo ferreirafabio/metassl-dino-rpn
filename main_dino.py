@@ -462,7 +462,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
         if args.test_mode:
             images_test_mode = copy.deepcopy(images)
-            print(f"images_test_mode requires grad and is cuda: {images_test_mode[0].requires_grad, images_test_mode[0].is_cuda}")
+            print(f"images_test_mode is cuda: {images_test_mode[0].is_cuda}")
             
             
         # teacher and student forward passes + compute dino loss
@@ -525,9 +525,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 if args.test_mode:
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                     
-                    images = rpn(images, invert_rpn_gradients=False)
-                    teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
-                    student_output = student(images)
+                    _ = rpn(images_test_mode, invert_rpn_gradients=False)
+                    teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
+                    student_output = student(images_test_mode)
                     loss = dino_loss(student_output, teacher_output, epoch)
                     loss.backward()
                     print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
