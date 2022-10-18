@@ -31,10 +31,7 @@ import vision_transformer as vits
 
 def eval_linear(args):
     utils.fix_random_seeds(args.seed)
-    if args.is_neps_run:
-        pass  # utils.init_distributed_mode(args) done in pretraining
-    else:
-        utils.init_distributed_mode(args, None)
+    utils.init_distributed_mode(args, None)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
@@ -83,41 +80,19 @@ def eval_linear(args):
     ])
 
     dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
-    if args.is_neps_run:
-        dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=val_transform)
-        
-        dataset_percentage_usage = 100
-        valid_size = 0.2
-        num_train = int(len(dataset_train) / 100 * dataset_percentage_usage)
-        indices = list(range(num_train))
-        split = int(np.floor(valid_size * num_train))
-        
-        np.random.shuffle(indices)
-
-        if np.isclose(valid_size, 0.0):
-            train_idx, valid_idx = indices, indices
-        else:
-            train_idx, valid_idx = indices[split:], indices[:split]
-        
-        assert valid_idx[:10] == args.assert_valid_idx
-
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_idx)
-        valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_idx)
-    
-    else:
-        dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
-        sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
+    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
     
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
-        sampler=train_sampler if args.is_neps_run else sampler,
+        sampler=sampler,
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
     )
     val_loader = torch.utils.data.DataLoader(
         dataset_val,
-        sampler=valid_sampler if args.is_neps_run else None,
+        sampler=None,
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -129,10 +104,8 @@ def eval_linear(args):
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
     
-    if args.is_neps_run:
-        print(f"Data loaded with {len(train_idx)} train and {len(valid_idx)} val imgs.")
-    else:
-        print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
+
+    print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
 
     # set optimizer
     optimizer = torch.optim.SGD(
@@ -154,16 +127,8 @@ def eval_linear(args):
     )
     start_epoch = to_restore["epoch"]
     best_acc = to_restore["best_acc"]
-    
-    if hasattr(args, "epoch_fidelity") and int(args.epoch_fidelity) == 6:
-        epoch_end_range = 25
-    elif hasattr(args, "epoch_fidelity") and (args.epoch_fidelity) == 25:
-        epoch_end_range = 50
-    elif hasattr(args, "epoch_fidelity") and (args.epoch_fidelity) == 100:
-        epoch_end_range = 100
-    else:
-        # is_neps_run == False
-        epoch_end_range = args.epochs
+
+    epoch_end_range = args.epochs
 
     for epoch in range(start_epoch, epoch_end_range):
         train_loader.sampler.set_epoch(epoch)
@@ -199,10 +164,6 @@ def eval_linear(args):
     print("Training of the supervised linear classifier on frozen features completed.\n"
                 "Top-1 test accuracy: {acc:.1f}".format(acc=best_acc))
     
-    if args.is_neps_run:
-        print("OUTPUT_DIR: ", args.output_dir)
-        with open(str(args.output_dir) + "/current_val_metric.txt", "w+") as f:
-            f.write(f"{best_acc}\n")
 
 def train(args, model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     linear_classifier.train()
@@ -331,7 +292,6 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
     parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
-    parser.add_argument("--is_neps_run", action="store_true", help="Set this flag to run a NEPS experiment.")
     parser.add_argument("--do_early_stopping", action="store_true", help="Set this flag to take the best test performance - Default by the DINO implementation.")
     parser.add_argument("--world_size", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")
     parser.add_argument("--gpu", default=8, type=int, help="actually not needed here -- just for avoiding unrecognized arguments error")

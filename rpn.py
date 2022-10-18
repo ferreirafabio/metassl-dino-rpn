@@ -85,8 +85,8 @@ class ResNetRPN(nn.Module):
         torch.nn.init.xavier_uniform_(backbone.fc.weight)
         self.backbone = backbone
 
-    def forward(self, x):
-        if self.invert_rpn_gradients:
+    def forward(self, x, invert_rpn_gradients):
+        if invert_rpn_gradients:
             x = grad_reverse(x)
             
         x = self.backbone(x)
@@ -108,8 +108,8 @@ class LocalizationNet(nn.Module):
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
         
-    def forward(self, x):
-        if self.invert_gradients:
+    def forward(self, x, invert_rpn_gradients):
+        if invert_rpn_gradients:
             x = grad_reverse(x)
             
         x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
@@ -132,8 +132,8 @@ class LocHead(nn.Module):
         self.linear1 = nn.Linear(256 if deep_loc_net else 128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
-    def forward(self, x):
-        if self.invert_gradients:
+    def forward(self, x, invert_rpn_gradients):
+        if invert_rpn_gradients:
             x = grad_reverse(x)
         
         x = torch.flatten(x, 1)
@@ -284,8 +284,8 @@ class STN(nn.Module):
         
         return theta_new
     
-    def forward(self, x):
-        if self.invert_rpn_gradients:
+    def forward(self, x, invert_rpn_gradients):
+        if invert_rpn_gradients:
             x = grad_reverse(x)
             
         if self.separate_localization_net:
@@ -347,7 +347,7 @@ class AugmentationNetwork(nn.Module):
         print("Initializing Augmentation Network")
         self.transform_net = transform_net
 
-    def forward(self, imgs):
+    def forward(self, imgs, invert_rpn_gradients):
         global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
         
         # since we have list of images with varying resolution, we need to transform them individually
@@ -362,7 +362,7 @@ class AugmentationNetwork(nn.Module):
             if self.transform_net.invert_rpn_gradients:
                 img = grad_reverse(img)
         
-            global_local_views = self.transform_net(img)
+            global_local_views = self.transform_net(img, invert_rpn_gradients)
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
             l1_augmented = torch.squeeze(global_local_views[2], 0)
