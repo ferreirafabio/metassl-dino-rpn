@@ -521,8 +521,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             else:
                 print(rpn.module.transform_net.localization_net.conv2d_2.weight)
             print("--------------------------------------------------------")
-            print("remove afterwards--------------------------")
-            torch.distributed.barrier()
             print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
             
             if args.test_mode:
