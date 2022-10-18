@@ -535,6 +535,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     loss = dino_loss(student_output, teacher_output, epoch)
                     loss.backward()
                     print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+
+                    torch.distributed.barrier()
                     not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                     print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
                     break
