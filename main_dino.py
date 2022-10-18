@@ -525,9 +525,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 if args.test_mode:
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                     
-                    _ = rpn(images_test_mode, invert_rpn_gradients=False)
-                    teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
-                    student_output = student(images_test_mode)
+                    images = rpn(images_test_mode, invert_rpn_gradients=False)
+                    teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
+                    student_output = student(images)
                     loss = dino_loss(student_output, teacher_output, epoch)
                     loss.backward()
                     print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
