@@ -94,12 +94,10 @@ class ResNetRPN(nn.Module):
 
     
 class LocalizationNet(nn.Module):
-    def __init__(self, invert_gradients, conv1_depth=16, conv2_depth=32, deep=False):
+    def __init__(self, conv1_depth=16, conv2_depth=32, deep=False):
         super().__init__()
         
         self.deep = deep
-        
-        self.invert_gradients = invert_gradients
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
         if self.deep:
@@ -121,10 +119,9 @@ class LocalizationNet(nn.Module):
 
 
 class LocHead(nn.Module):
-    def __init__(self, invert_gradients, stn_mode, conv2_depth, deep_loc_net=False):
+    def __init__(self, stn_mode, conv2_depth, deep_loc_net=False):
         super().__init__()
         
-        self.invert_gradients = invert_gradients
         self.stn_n_params = N_PARAMS[stn_mode]
         self.deep_loc_net = deep_loc_net
         
@@ -163,25 +160,25 @@ class STN(nn.Module):
         if self.separate_localization_net:
             conv1_depth = 16
             conv2_depth = 8
-            self.localization_net_g1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
-            self.localization_net_g2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
-            self.localization_net_l1 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
-            self.localization_net_l2 = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth)
+            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
+            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
+            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
+            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
             if deep_loc_net:
                 conv1_depth = 32
                 conv2_depth = 64
-                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=self.deep_loc_net)
+                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=self.deep_loc_net)
             else:
                 conv1_depth = 32
                 conv2_depth = 16
-                self.localization_net = LocalizationNet(invert_rpn_gradients, conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
+                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
-        self.fc_localization_global2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
-        self.fc_localization_local1 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
-        self.fc_localization_local2 = LocHead(invert_gradients=invert_rpn_gradients, stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_global1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_global2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_local1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_local2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
         
         # Initialize the weights/bias with identity transformation
         self.fc_localization_global1.linear2.weight.data.zero_()
@@ -289,15 +286,15 @@ class STN(nn.Module):
             x = grad_reverse(x)
             
         if self.separate_localization_net:
-            x_loc_features_g1 = self.localization_net_g1(x)
-            x_loc_features_g2 = self.localization_net_g2(x)
-            x_loc_features_l1 = self.localization_net_l1(x)
-            x_loc_features_l2 = self.localization_net_l2(x)
+            x_loc_features_g1 = self.localization_net_g1(x, invert_rpn_gradients)
+            x_loc_features_g2 = self.localization_net_g2(x, invert_rpn_gradients)
+            x_loc_features_l1 = self.localization_net_l1(x, invert_rpn_gradients)
+            x_loc_features_l2 = self.localization_net_l2(x, invert_rpn_gradients)
     
-            theta_g1 = self.fc_localization_global1(x_loc_features_g1)
-            theta_g2 = self.fc_localization_global2(x_loc_features_g2)
-            theta_l1 = self.fc_localization_local1(x_loc_features_l1)
-            theta_l2 = self.fc_localization_local2(x_loc_features_l2)
+            theta_g1 = self.fc_localization_global1(x_loc_features_g1, invert_rpn_gradients)
+            theta_g2 = self.fc_localization_global2(x_loc_features_g2, invert_rpn_gradients)
+            theta_l1 = self.fc_localization_local1(x_loc_features_l1, invert_rpn_gradients)
+            theta_l2 = self.fc_localization_local2(x_loc_features_l2, invert_rpn_gradients)
             
             theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features_g1)
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features_g2)
@@ -305,12 +302,12 @@ class STN(nn.Module):
             theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features_l2)
             
         else:
-            x_loc_features = self.localization_net(x)
+            x_loc_features = self.localization_net(x, invert_rpn_gradients)
     
-            theta_g1 = self.fc_localization_global1(x_loc_features)
-            theta_g2 = self.fc_localization_global2(x_loc_features)
-            theta_l1 = self.fc_localization_local1(x_loc_features)
-            theta_l2 = self.fc_localization_local2(x_loc_features)
+            theta_g1 = self.fc_localization_global1(x_loc_features, invert_rpn_gradients)
+            theta_g2 = self.fc_localization_global2(x_loc_features, invert_rpn_gradients)
+            theta_l1 = self.fc_localization_local1(x_loc_features, invert_rpn_gradients)
+            theta_l2 = self.fc_localization_local2(x_loc_features, invert_rpn_gradients)
         
             theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features)
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features)
