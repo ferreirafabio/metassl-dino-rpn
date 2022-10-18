@@ -459,7 +459,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         
         if it % args.summary_writer_freq == 0:
             uncropped_images = copy.deepcopy(images)
-        
+            
+        if args.test_mode:
+            import copy
+            images_test_mode = copy.deepcopy(images)
+            print(f"images_test_mode requires grad and is cuda: {images_test_mode.requires_grad, images_test_mode.is_cuda}")
+            
+            
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images, invert_rpn_gradients=args.invert_rpn_gradients)

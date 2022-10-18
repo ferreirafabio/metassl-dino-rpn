@@ -165,10 +165,10 @@ class STN(nn.Module):
             self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
             self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
         else:
-            if deep_loc_net:
+            if self.deep_loc_net:
                 conv1_depth = 32
                 conv2_depth = 64
-                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=self.deep_loc_net)
+                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=True)
             else:
                 conv1_depth = 32
                 conv2_depth = 16
