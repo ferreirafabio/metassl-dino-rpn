@@ -526,14 +526,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 
                 if args.test_mode:
-                    
+                    torch.use_deterministic_algorithms()
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 
                     rpn_optimizer.zero_grad()
                     optimizer.zero_grad()
-
-                    for n, p in rpn.module.transform_net.fc_localization_local1.named_parameters():
-                        print(p.grad)
                     
                     images_test_mode = rpn(images_test_mode, invert_rpn_gradients=False)
                     teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
