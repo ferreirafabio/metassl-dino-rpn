@@ -115,7 +115,7 @@ class LocalizationNet(nn.Module):
         if invert_rpn_gradients:
             fct_grad_rev = grad_reverse
         else:
-            fct_grad_rev = torch.nn.Identity
+            fct_grad_rev = nn.Identity
 
         x = fct_grad_rev(self.maxpool2d(F.leaky_relu(self.conv2d_1(x))))
         if self.deep:
@@ -140,7 +140,7 @@ class LocHead(nn.Module):
         if invert_rpn_gradients:
             fct_grad_rev = grad_reverse
         else:
-            fct_grad_rev = torch.nn.Identity
+            fct_grad_rev = nn.Identity
         
         x = fct_grad_rev(torch.flatten(x, 1))
         x = fct_grad_rev(F.leaky_relu(self.linear0(x)))
@@ -295,7 +295,7 @@ class STN(nn.Module):
         if invert_rpn_gradients:
             fct_grad_rev = grad_reverse
         else:
-            fct_grad_rev = torch.nn.Identity
+            fct_grad_rev = nn.Identity
             
         if self.separate_localization_net:
             x_loc_features_g1 = fct_grad_rev(self.localization_net_g1(x, invert_rpn_gradients))
