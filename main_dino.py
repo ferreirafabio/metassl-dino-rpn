@@ -526,7 +526,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 
                 if args.test_mode:
-                    torch.use_deterministic_algorithms()
+                    torch.use_deterministic_algorithms(True)
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 
                     rpn_optimizer.zero_grad()
