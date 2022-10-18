@@ -663,7 +663,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     
-    os.environ["NCCL_DEBUG"] = "INFO"
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    # os.environ["NCCL_DEBUG"] = "INFO"
+    # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     
     dino_neps_main(args.output_dir, previous_working_directory=None, args=args)
