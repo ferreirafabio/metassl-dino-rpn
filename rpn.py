@@ -59,44 +59,6 @@ def grad_reverse(x, scale=1.0):
     GradientReverse.scale = scale
     return GradientReverse.apply(x)
 
-
-class ResNetRPN(nn.Module):
-    def __init__(self, backbone='resnet18', out_dim=256, invert_rpn_gradients=False):
-        super().__init__()
-        
-        self.invert_rpn_gradients = invert_rpn_gradients
-        
-        if backbone == 'resnet18':
-            backbone = resnet18(pretrained=False)
-            # summary(backbone.cuda(), (3, 224, 224))
-        elif backbone == 'resnet9':
-            backbone = resnet9(pretrained=False)
-            print("resnet9 backbone: ", backbone)
-            # summary(backbone.cuda(), (3, 224, 224))
-        elif backbone == 'resnet34':
-            backbone = resnet34(pretrained=False)
-        elif backbone == 'resnet50':
-            backbone = resnet50(pretrained=False)
-        elif backbone == 'resnet101':
-            backbone = resnet101(pretrained=False)
-        else:  # backbone == 'resnet152':
-            backbone = resnet152(pretrained=False)
-        # if backbone_path:
-        #     backbone.load_state_dict(torch.load(backbone_path))
-
-        backbone.fc = nn.Linear(512, out_dim)
-        torch.nn.init.xavier_uniform_(backbone.fc.weight)
-        self.backbone = backbone
-
-    def forward(self, x, invert_rpn_gradients):
-        # if invert_rpn_gradients:
-        #     x = grad_reverse(x)
-        if invert_rpn_gradients:
-            x = grad_reverse(self.backbone(x))
-        else:
-            x = self.backbone(x)
-        return x
-
     
 class LocalizationNet(nn.Module):
     def __init__(self, conv1_depth=16, conv2_depth=32, deep=False):
@@ -366,7 +328,7 @@ class AugmentationNetwork(nn.Module):
                 print(e)
         
             if invert_rpn_gradients:
-                img = grad_reverse(img)
+                # img = grad_reverse(img)
                 global_local_views = grad_reverse(self.transform_net(img))
             else:
                 global_local_views = self.transform_net(img)
