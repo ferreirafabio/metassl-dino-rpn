@@ -463,7 +463,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             images_test_mode = copy.deepcopy(images)
             print(f"images_test_mode is cuda: {images_test_mode[0].is_cuda}")
             
-            
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images, invert_rpn_gradients=args.invert_rpn_gradients)
@@ -515,7 +514,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 if args.test_mode:
                     print("rpn step")
 
-            # if it % args.grad_check_freq == 0 and not static_rpn:
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 if args.separate_localization_net:
