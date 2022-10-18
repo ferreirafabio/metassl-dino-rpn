@@ -18,7 +18,6 @@ import datetime
 import time
 import math
 import json
-# import neps
 import logging
 from pathlib import Path
 import pickle
@@ -525,7 +524,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 if args.test_mode:
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
 
-                    print(f"inputs are equal: {np.array_equal(images, images_test_mode)}")
+                    print(f"inputs are equal: {np.isclose(images, images_test_mode)}")
                     
                     images = rpn(images_test_mode, invert_rpn_gradients=False)
                     teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
@@ -534,7 +533,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     loss.backward()
                     print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                     not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-                    print(f"arrays are equal: {np.array_equal(inverted_grads_l1, not_inverted_grads_l1)}")
+                    print(f"arrays are equal: {np.array_equal(inverted_grads_l1, not_inverted_grads_l1, equal_nan=True)}")
                     break
                 
                 if args.separate_localization_net:
