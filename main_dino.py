@@ -462,7 +462,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            images = rpn(images)
+            images = rpn(images, invert_rpn_gradients=args.invert_rpn_gradients)
             
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
