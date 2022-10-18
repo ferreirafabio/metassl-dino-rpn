@@ -154,6 +154,9 @@ def get_args_parser():
     parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
     
+    # tests
+    parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
+    
     return parser
 
 
