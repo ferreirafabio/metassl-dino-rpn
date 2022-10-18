@@ -329,9 +329,8 @@ class AugmentationNetwork(nn.Module):
         
             if invert_rpn_gradients:
                 img = grad_reverse(img)
-                global_local_views = grad_reverse(self.transform_net(img, invert_rpn_gradients=True))
-            else:
-                global_local_views = self.transform_net(img, invert_rpn_gradients=False)
+                
+            global_local_views = self.transform_net(img, invert_rpn_gradients=invert_rpn_gradients)
             
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
