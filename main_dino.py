@@ -508,6 +508,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             if not args.test_mode:
                 optimizer.step()
+                print("optimizer step")
             
             if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
                 rpn_optimizer.step()
@@ -526,7 +527,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
                 if args.test_mode:
                     
-                    torch.distributed.barrier()
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 
                     rpn_optimizer.zero_grad()
