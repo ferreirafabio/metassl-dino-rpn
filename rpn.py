@@ -50,7 +50,6 @@ class GradientReverse(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         print(f"negative grads: {grad_output.neg()}")
-        print(ctx)
         print(grad_output.shape)
         return GradientReverse.scale * grad_output.neg()
 
@@ -75,11 +74,11 @@ class LocalizationNet(nn.Module):
         
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
-            x = grad_reverse(self.maxpool2d(F.leaky_relu(self.conv2d_1(x))))
+            x = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_1(x)))))
             if self.deep:
-                x = grad_reverse(self.maxpool2d(F.leaky_relu(self.conv2d_deep(x))))
-                x = grad_reverse(self.maxpool2d(F.leaky_relu(self.conv2d_deep(x))))
-            x = grad_reverse(self.avgpool(F.leaky_relu(self.conv2d_2(x))))
+                x = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(x)))))
+                x = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(x)))))
+            x = grad_reverse(self.avgpool(F.leaky_relu(grad_reverse(self.conv2d_2(x)))))
         else:
             x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
             if self.deep:
@@ -103,9 +102,9 @@ class LocHead(nn.Module):
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
             x = grad_reverse(torch.flatten(x, 1))
-            x = grad_reverse(F.leaky_relu(self.linear0(x)))
-            x = grad_reverse(F.leaky_relu(self.linear1(x)))
-            x = grad_reverse(self.linear2(x))
+            x = grad_reverse(F.leaky_relu(grad_reverse(self.linear0(x))))
+            x = grad_reverse(F.leaky_relu(grad_reverse(self.linear1(x))))
+            x = grad_reverse(grad_reverse(self.linear2(x)))
         else:
             x = torch.flatten(x, 1)
             x = F.leaky_relu(self.linear0(x))
