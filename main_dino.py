@@ -462,7 +462,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
         if args.test_mode:
             images_test_mode = copy.deepcopy(images)
-            print(f"images_test_mode requires grad and is cuda: {images_test_mode.requires_grad, images_test_mode.is_cuda}")
+            print(f"images_test_mode requires grad and is cuda: {images_test_mode[0].requires_grad, images_test_mode[0].is_cuda}")
             
             
         # teacher and student forward passes + compute dino loss
