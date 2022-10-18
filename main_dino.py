@@ -524,6 +524,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
                 if args.test_mode:
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
+
+                    print(f"inputs are equal: {np.array_equal(images, images_test_mode)}")
                     
                     images = rpn(images_test_mode, invert_rpn_gradients=False)
                     teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
