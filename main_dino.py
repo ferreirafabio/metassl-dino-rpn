@@ -510,6 +510,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
             if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
                 rpn_optimizer.step()
+                if args.test_mode:
+                    print("rpn step")
 
             # if it % args.grad_check_freq == 0 and not static_rpn:
             if it % args.grad_check_freq == 0:
@@ -522,6 +524,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 
                 if args.test_mode:
+                    rpn_optimizer.zero_grad()
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 
                     images_test_mode = rpn(images_test_mode, invert_rpn_gradients=False)
