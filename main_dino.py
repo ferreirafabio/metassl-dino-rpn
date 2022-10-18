@@ -523,18 +523,15 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
                 if args.test_mode:
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-
-                    for img, img_test in zip(images, images_test_mode):
-                        print(f"inputs are equal: {np.isclose(img.cpu().data.numpy(), img_test.cpu().data.numpy())}")
                 
-                    images = rpn(images_test_mode, invert_rpn_gradients=False)
-                    teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
-                    student_output = student(images)
+                    images_test_mode = rpn(images_test_mode, invert_rpn_gradients=False)
+                    teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
+                    student_output = student(images_test_mode)
                     loss = dino_loss(student_output, teacher_output, epoch)
                     loss.backward()
                     print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                     not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-                    print(f"arrays are equal: {np.array_equal(inverted_grads_l1, not_inverted_grads_l1, equal_nan=True)}")
+                    print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
                     break
                 
                 if args.separate_localization_net:
