@@ -509,7 +509,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             optimizer.step()
             
-            if args.use_rpn_optimizer and not use_pretrained_rpn:
+            if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
                 rpn_optimizer.step()
 
             # if it % args.grad_check_freq == 0 and not static_rpn:
