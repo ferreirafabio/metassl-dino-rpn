@@ -506,7 +506,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
 
-            optimizer.step()
+            if not args.test_mode:
+                optimizer.step()
             
             if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
                 rpn_optimizer.step()
@@ -524,10 +525,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 
                 if args.test_mode:
+                    
                     torch.distributed.barrier()
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 
                     rpn_optimizer.zero_grad()
+                    optimizer.zero_grad()
                     
                     images_test_mode = rpn(images_test_mode, invert_rpn_gradients=False)
                     teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
