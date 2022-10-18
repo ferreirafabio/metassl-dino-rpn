@@ -526,7 +526,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 
                 if args.test_mode:
-                    torch.use_deterministic_algorithms(True)
+                    torch.use_deterministic_algorithms(False, warn_only=True)
                     inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 
                     rpn_optimizer.zero_grad()
@@ -658,9 +658,6 @@ class DINOLoss(nn.Module):
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
-
-
-
 
 
 if __name__ == '__main__':
