@@ -111,17 +111,19 @@ class LocalizationNet(nn.Module):
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
         
-    def forward(self, x, invert_rpn_gradients):
-        if invert_rpn_gradients:
-            fct_grad_rev = grad_reverse
-        else:
-            fct_grad_rev = nn.Identity
-
-        x = fct_grad_rev(self.maxpool2d(F.leaky_relu(self.conv2d_1(x))))
+    def forward(self, x):
+        # if invert_rpn_gradients:
+        #     x = grad_reverse(self.maxpool2d(F.leaky_relu(self.conv2d_1(x))))
+        #     if self.deep:
+        #         x = grad_reverse(self.maxpool2d(F.leaky_relu(self.conv2d_deep(x))))
+        #         x = grad_reverse(self.maxpool2d(F.leaky_relu(self.conv2d_deep(x))))
+        #     x = grad_reverse(self.avgpool(F.leaky_relu(self.conv2d_2(x))))
+        # else:
+        x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
         if self.deep:
-            x = fct_grad_rev(self.maxpool2d(F.leaky_relu(self.conv2d_deep(x))))
-            x = fct_grad_rev(self.maxpool2d(F.leaky_relu(self.conv2d_deep(x))))
-        x = fct_grad_rev(self.avgpool(F.leaky_relu(self.conv2d_2(x))))
+            x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
+            x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
+        x = self.avgpool(F.leaky_relu(self.conv2d_2(x)))
         return x
 
 
@@ -136,16 +138,17 @@ class LocHead(nn.Module):
         self.linear1 = nn.Linear(256 if deep_loc_net else 128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
     
-    def forward(self, x, invert_rpn_gradients):
-        if invert_rpn_gradients:
-            fct_grad_rev = grad_reverse
-        else:
-            fct_grad_rev = nn.Identity
-        
-        x = fct_grad_rev(torch.flatten(x, 1))
-        x = fct_grad_rev(F.leaky_relu(self.linear0(x)))
-        x = fct_grad_rev(F.leaky_relu(self.linear1(x)))
-        x = fct_grad_rev(self.linear2(x))
+    def forward(self, x):
+        # if invert_rpn_gradients:
+        #     x = grad_reverse(torch.flatten(x, 1))
+        #     x = grad_reverse(F.leaky_relu(self.linear0(x)))
+        #     x = grad_reverse(F.leaky_relu(self.linear1(x)))
+        #     x = grad_reverse(self.linear2(x))
+        # else:
+        x = torch.flatten(x, 1)
+        x = F.leaky_relu(self.linear0(x))
+        x = F.leaky_relu(self.linear1(x))
+        x = self.linear2(x)
     
         return x
     
@@ -154,11 +157,10 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, backbone="resnet18", stn_mode='affine', invert_rpn_gradients=False, separate_localization_net=False, deep_loc_net=False):
+    def __init__(self, stn_mode='affine', separate_localization_net=False, deep_loc_net=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
-        self.invert_rpn_gradients = invert_rpn_gradients
         self.separate_localization_net = separate_localization_net
         self.deep_loc_net = deep_loc_net
         self.affine_matrix_g1 = None
@@ -291,22 +293,17 @@ class STN(nn.Module):
         
         return theta_new
     
-    def forward(self, x, invert_rpn_gradients):
-        if invert_rpn_gradients:
-            fct_grad_rev = grad_reverse
-        else:
-            fct_grad_rev = nn.Identity
-            
+    def forward(self, x):
         if self.separate_localization_net:
-            x_loc_features_g1 = fct_grad_rev(self.localization_net_g1(x, invert_rpn_gradients))
-            x_loc_features_g2 = fct_grad_rev(self.localization_net_g2(x, invert_rpn_gradients))
-            x_loc_features_l1 = fct_grad_rev(self.localization_net_l1(x, invert_rpn_gradients))
-            x_loc_features_l2 = fct_grad_rev(self.localization_net_l2(x, invert_rpn_gradients))
+            x_loc_features_g1 = self.localization_net_g1(x)
+            x_loc_features_g2 = self.localization_net_g2(x)
+            x_loc_features_l1 = self.localization_net_l1(x)
+            x_loc_features_l2 = self.localization_net_l2(x)
     
-            theta_g1 = fct_grad_rev(self.fc_localization_global1(x_loc_features_g1, invert_rpn_gradients))
-            theta_g2 = fct_grad_rev(self.fc_localization_global2(x_loc_features_g2, invert_rpn_gradients))
-            theta_l1 = fct_grad_rev(self.fc_localization_local1(x_loc_features_l1, invert_rpn_gradients))
-            theta_l2 = fct_grad_rev(self.fc_localization_local2(x_loc_features_l2, invert_rpn_gradients))
+            theta_g1 = self.fc_localization_global1(x_loc_features_g1)
+            theta_g2 = self.fc_localization_global2(x_loc_features_g2)
+            theta_l1 = self.fc_localization_local1(x_loc_features_l1)
+            theta_l2 = self.fc_localization_local2(x_loc_features_l2)
             
             theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features_g1)
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features_g2)
@@ -314,12 +311,12 @@ class STN(nn.Module):
             theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features_l2)
             
         else:
-            x_loc_features = fct_grad_rev(self.localization_net(x, invert_rpn_gradients))
+            x_loc_features = self.localization_net(x)
     
-            theta_g1 = fct_grad_rev(self.fc_localization_global1(x_loc_features, invert_rpn_gradients))
-            theta_g2 = fct_grad_rev(self.fc_localization_global2(x_loc_features, invert_rpn_gradients))
-            theta_l1 = fct_grad_rev(self.fc_localization_local1(x_loc_features, invert_rpn_gradients))
-            theta_l2 = fct_grad_rev(self.fc_localization_local2(x_loc_features, invert_rpn_gradients))
+            theta_g1 = self.fc_localization_global1(x_loc_features)
+            theta_g2 = self.fc_localization_global2(x_loc_features)
+            theta_l1 = self.fc_localization_local1(x_loc_features)
+            theta_l2 = self.fc_localization_local2(x_loc_features)
         
             theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features)
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features)
@@ -368,10 +365,12 @@ class AugmentationNetwork(nn.Module):
             except Exception as e:
                 print(e)
         
-            if self.transform_net.invert_rpn_gradients:
+            if invert_rpn_gradients:
                 img = grad_reverse(img)
-        
-            global_local_views = self.transform_net(img, invert_rpn_gradients)
+                global_local_views = grad_reverse(self.transform_net(img))
+            else:
+                global_local_views = self.transform_net(img)
+            
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
             l1_augmented = torch.squeeze(global_local_views[2], 0)
