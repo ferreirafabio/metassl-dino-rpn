@@ -152,6 +152,7 @@ def get_args_parser():
     parser.add_argument("--grad_check_freq", default=5000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
     parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
+    parser.add_argument("--use_bn", default=False, type=utils.bool_flag, help="Set this flag to activate BatchNorm in RPN.")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -239,7 +240,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(stn_mode=args.stn_mode, separate_localization_net=args.separate_localization_net, deep_loc_net=args.deep_loc_net)
+    transform_net = STN(stn_mode=args.stn_mode, separate_localization_net=args.separate_localization_net, deep_loc_net=args.deep_loc_net, use_bn=args.use_bn)
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions

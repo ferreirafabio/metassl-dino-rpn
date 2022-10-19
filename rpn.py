@@ -105,6 +105,7 @@ class LocHead(nn.Module):
         
         self.stn_n_params = N_PARAMS[stn_mode]
         self.deep_loc_net = deep_loc_net
+        self.use_bn = use_bn
     
         self.linear0 = nn.Linear(8 * 8 * conv2_depth, 256 if deep_loc_net else 128)
         self.linear1 = nn.Linear(256 if deep_loc_net else 128, 32)
@@ -137,12 +138,13 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, stn_mode='affine', separate_localization_net=False, deep_loc_net=False):
+    def __init__(self, stn_mode='affine', separate_localization_net=False, deep_loc_net=False, use_bn=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
         self.separate_localization_net = separate_localization_net
         self.deep_loc_net = deep_loc_net
+        self.use_bn = use_bn
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None
         self.affine_matrix_l1 = None
@@ -152,25 +154,25 @@ class STN(nn.Module):
         if self.separate_localization_net:
             conv1_depth = 16
             conv2_depth = 8
-            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
-            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
-            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
-            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth)
+            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn)
+            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn)
+            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn)
+            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn)
         else:
             if self.deep_loc_net:
                 conv1_depth = 32
                 conv2_depth = 64
-                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=True)
+                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=True, use_bn=self.use_bn)
             else:
                 conv1_depth = 32
                 conv2_depth = 16
-                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False)
+                self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, use_bn=self.use_bn)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
-        self.fc_localization_global2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
-        self.fc_localization_local1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
-        self.fc_localization_local2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_global1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
+        self.fc_localization_global2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
+        self.fc_localization_local1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
+        self.fc_localization_local2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
         
         # Initialize the weights/bias with identity transformation
         self.fc_localization_global1.linear2.weight.data.zero_()
