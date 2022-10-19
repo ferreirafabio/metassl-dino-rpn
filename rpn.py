@@ -15,8 +15,6 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from torchvision.models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
-from utils import resnet9
 from torchvision.transforms.functional import crop, resize
 from torchvision import transforms
 import utils
@@ -100,35 +98,27 @@ class LocalizationNet(nn.Module):
 
 
 class LocHead(nn.Module):
-    def __init__(self, stn_mode, conv2_depth, deep_loc_net=False, use_bn=False):
+    def __init__(self, stn_mode, conv2_depth, deep_loc_net=False):
         super().__init__()
         
         self.stn_n_params = N_PARAMS[stn_mode]
         self.deep_loc_net = deep_loc_net
-        self.use_bn = use_bn
     
         self.linear0 = nn.Linear(8 * 8 * conv2_depth, 256 if deep_loc_net else 128)
         self.linear1 = nn.Linear(256 if deep_loc_net else 128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
-        
-        if self.use_bn:
-            self.linear_bn0 = nn.BatchNorm1d(256 if deep_loc_net else 128)
-            self.linear_bn1 = nn.BatchNorm1d(32)
-        else:
-            self.linear_bn0 = nn.Identity()
-            self.linear_bn1 = nn.Identity()
     
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
             xs = grad_reverse(x)
             xs = grad_reverse(torch.flatten(xs, 1))
-            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear_bn0(grad_reverse(self.linear0(xs))))))
-            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear_bn1(grad_reverse(self.linear1(xs))))))
+            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear0(xs))))
+            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear1(xs))))
             xs = grad_reverse(grad_reverse(self.linear2(xs)))
         else:
             xs = torch.flatten(x, 1)
-            xs = F.leaky_relu(self.linear_bn0(self.linear0(xs)))
-            xs = F.leaky_relu(self.linear_bn1(self.linear1(xs)))
+            xs = F.leaky_relu(self.linear0(xs))
+            xs = F.leaky_relu(self.linear1(xs))
             xs = self.linear2(xs)
     
         return xs
@@ -169,10 +159,10 @@ class STN(nn.Module):
                 self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, use_bn=self.use_bn)
 
         # Regressors for the 3 * 2 affine matrix
-        self.fc_localization_global1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
-        self.fc_localization_global2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
-        self.fc_localization_local1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
-        self.fc_localization_local2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net, use_bn=self.use_bn)
+        self.fc_localization_global1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_global2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_local1 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
+        self.fc_localization_local2 = LocHead(stn_mode=stn_mode, conv2_depth=conv2_depth, deep_loc_net=self.deep_loc_net)
         
         # Initialize the weights/bias with identity transformation
         self.fc_localization_global1.linear2.weight.data.zero_()
