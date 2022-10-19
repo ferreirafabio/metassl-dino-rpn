@@ -49,8 +49,8 @@ class GradientReverse(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output):
-        print(f"negative grads: {grad_output.neg()}")
-        print(grad_output.shape)
+        # print(f"negative grads: {grad_output.neg()}")
+        # print(grad_output.shape)
         return GradientReverse.scale * grad_output.neg()
 
 

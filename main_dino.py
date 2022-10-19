@@ -524,7 +524,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
             
             if args.test_mode:
-                torch.use_deterministic_algorithms(False, warn_only=True)
+                # torch.use_deterministic_algorithms(False, warn_only=True)
                 inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
             
                 rpn_optimizer.zero_grad()
@@ -540,7 +540,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
                 print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
-                break
+                # break
             
             if args.separate_localization_net:
                 print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
