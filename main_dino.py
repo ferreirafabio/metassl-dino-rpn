@@ -396,10 +396,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     start_time = time.time()
     print("Starting DINO training !")
-
-
+    
     end_epoch = args.epochs
-   
     
     for epoch in range(start_epoch, end_epoch):
         data_loader.sampler.set_epoch(epoch)
@@ -485,6 +483,14 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
+            
+            summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
+            summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
+            if args.use_rpn_optimizer and not use_pretrained_rpn:
+                summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"], global_step=it)
+            summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"], global_step=it)
+            
+            metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
@@ -569,6 +575,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     print(rpn.module.transform_net.localization_net.conv2d_2.weight)
                 print("--------------------------------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+                print("is global receiving grad updates?--------------------------------------------------------")
+                print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
                 if args.separate_localization_net:
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
                 else:
