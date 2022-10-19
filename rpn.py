@@ -74,18 +74,19 @@ class LocalizationNet(nn.Module):
         
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
-            x = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_1(x)))))
+            xs = grad_reverse(x)
+            xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_1(xs)))))
             if self.deep:
-                x = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(x)))))
-                x = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(x)))))
-            x = grad_reverse(self.avgpool(F.leaky_relu(grad_reverse(self.conv2d_2(x)))))
+                xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(xs)))))
+                xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(xs)))))
+            xs = grad_reverse(self.avgpool(F.leaky_relu(grad_reverse(self.conv2d_2(xs)))))
         else:
-            x = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
+            xs = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
             if self.deep:
-                x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
-                x = self.maxpool2d(F.leaky_relu(self.conv2d_deep(x)))
-            x = self.avgpool(F.leaky_relu(self.conv2d_2(x)))
-        return x
+                xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep(xs)))
+                xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep(xs)))
+            xs = self.avgpool(F.leaky_relu(self.conv2d_2(xs)))
+        return xs
 
 
 class LocHead(nn.Module):
@@ -101,17 +102,18 @@ class LocHead(nn.Module):
     
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
-            x = grad_reverse(torch.flatten(x, 1))
-            x = grad_reverse(F.leaky_relu(grad_reverse(self.linear0(x))))
-            x = grad_reverse(F.leaky_relu(grad_reverse(self.linear1(x))))
-            x = grad_reverse(grad_reverse(self.linear2(x)))
+            xs = grad_reverse(x)
+            xs = grad_reverse(torch.flatten(xs, 1))
+            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear0(xs))))
+            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear1(xs))))
+            xs = grad_reverse(grad_reverse(self.linear2(xs)))
         else:
-            x = torch.flatten(x, 1)
-            x = F.leaky_relu(self.linear0(x))
-            x = F.leaky_relu(self.linear1(x))
-            x = self.linear2(x)
+            xs = torch.flatten(x, 1)
+            xs = F.leaky_relu(self.linear0(xs))
+            xs = F.leaky_relu(self.linear1(xs))
+            xs = self.linear2(xs)
     
-        return x
+        return xs
     
 
 class STN(nn.Module):
@@ -288,10 +290,10 @@ class STN(nn.Module):
         self.affine_matrix_g2 = theta_g2.cpu().detach().numpy()
         self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
         self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
-        # print(f"theta g1: {theta_g1}")
-        # print(f"theta g2: {theta_g2}")
-        # print(f"theta l1: {theta_l1}")
-        # print(f"theta l2: {theta_l2}")
+        print(f"theta g1: {theta_g1}")
+        print(f"theta g2: {theta_g2}")
+        print(f"theta l1: {theta_l1}")
+        print(f"theta l2: {theta_l2}")
         
         gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
         g1 = F.grid_sample(x, gridg1)
