@@ -144,7 +144,7 @@ def get_args_parser():
                                                                          "annealed with cosine and no warmup")
     parser.add_argument('--stn_mode', default='affine', type=str, help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
                                                                        'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
-    parser.add_argument("--rpnlr", default=1e-4, type=float, help="""Learning rate at the end of
+    parser.add_argument("--rpnlr", default=1e-3, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag, help="Set this flag to use a separate localization network for each head.")
@@ -309,7 +309,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         # all_params = student_params + list(rpn.parameters())
         # params_groups[0]['params'] = all_params
         
-        # do not use regularization of RPN params
+        # do not use wd scheduling of RPN params
         student_params = params_groups[1]['params']
         all_params = student_params + list(rpn.parameters())
         params_groups[1]['params'] = all_params
@@ -523,9 +523,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
                 else:
                     print(rpn.module.transform_net.localization_net.conv2d_2.weight)
-                print("--------------------------------------------------------")
+                    
+                print("-------------------------sanity check local grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-                print("is global receiving grad updates?--------------------------------------------------------")
+                print("-------------------------sanity check global grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
                 
                 if args.test_mode:
@@ -575,9 +576,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
                 else:
                     print(rpn.module.transform_net.localization_net.conv2d_2.weight)
-                print("--------------------------------------------------------")
+                print("-------------------------sanity check local grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-                print("is global receiving grad updates?--------------------------------------------------------")
+                print("-------------------------sanity check global grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
                 if args.separate_localization_net:
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
@@ -592,6 +593,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
                 
+        # TODO: do we need EMA update for the global heads? grads flow to global heads for now since we don't stop gradient there but may be worth trying to mimic DINO
+        
         del images
         
         # logging

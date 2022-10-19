@@ -60,14 +60,24 @@ def grad_reverse(x, scale=1.0):
 
     
 class LocalizationNet(nn.Module):
-    def __init__(self, conv1_depth=16, conv2_depth=32, deep=False):
+    def __init__(self, conv1_depth=16, conv2_depth=32, deep=False, use_bn=False):
         super().__init__()
         
         self.deep = deep
+        self.use_bn = use_bn
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
+        if self.use_bn:
+            self.conv2d_bn1 = nn.BatchNorm2d(conv1_depth)
+            self.conv2d_bn2 = nn.BatchNorm2d(conv2_depth)
+        else:
+            self.conv2d_bn1 = nn.Identity()
+            self.conv2d_bn2 = nn.Identity()
+        
         if self.deep:
             self.conv2d_deep = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
+            self.cnv2d_deep_bn1 = nn.BatchNorm2d(conv1_depth)
+            self.cnv2d_deep_bn2 = nn.BatchNorm2d(conv1_depth)
             
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
@@ -75,42 +85,49 @@ class LocalizationNet(nn.Module):
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
             xs = grad_reverse(x)
-            xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_1(xs)))))
+            xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_bn1(grad_reverse(self.conv2d_1(xs)))))))
             if self.deep:
                 xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(xs)))))
                 xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(xs)))))
-            xs = grad_reverse(self.avgpool(F.leaky_relu(grad_reverse(self.conv2d_2(xs)))))
+            xs = grad_reverse(self.avgpool(F.leaky_relu(grad_reverse(self.conv2d_bn2(grad_reverse(self.conv2d_2(xs)))))))
         else:
-            xs = self.maxpool2d(F.leaky_relu(self.conv2d_1(x)))
+            xs = self.maxpool2d(F.leaky_relu(self.conv2d_bn1(self.conv2d_1(x))))
             if self.deep:
-                xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep(xs)))
-                xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep(xs)))
-            xs = self.avgpool(F.leaky_relu(self.conv2d_2(xs)))
+                xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn1(self.conv2d_deep(xs))))
+                xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn2(self.conv2d_deep(xs))))
+            xs = self.avgpool(F.leaky_relu(self.conv2d_bn2(self.conv2d_2(xs))))
         return xs
 
 
 class LocHead(nn.Module):
-    def __init__(self, stn_mode, conv2_depth, deep_loc_net=False):
+    def __init__(self, stn_mode, conv2_depth, deep_loc_net=False, use_bn=False):
         super().__init__()
         
         self.stn_n_params = N_PARAMS[stn_mode]
         self.deep_loc_net = deep_loc_net
-        
+    
         self.linear0 = nn.Linear(8 * 8 * conv2_depth, 256 if deep_loc_net else 128)
         self.linear1 = nn.Linear(256 if deep_loc_net else 128, 32)
         self.linear2 = nn.Linear(32, self.stn_n_params)
+        
+        if self.use_bn:
+            self.linear_bn0 = nn.BatchNorm1d(256 if deep_loc_net else 128)
+            self.linear_bn1 = nn.BatchNorm1d(32)
+        else:
+            self.linear_bn0 = nn.Identity()
+            self.linear_bn1 = nn.Identity()
     
     def forward(self, x, invert_rpn_gradients):
         if invert_rpn_gradients:
             xs = grad_reverse(x)
             xs = grad_reverse(torch.flatten(xs, 1))
-            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear0(xs))))
-            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear1(xs))))
+            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear_bn0(grad_reverse(self.linear0(xs))))))
+            xs = grad_reverse(F.leaky_relu(grad_reverse(self.linear_bn1(grad_reverse(self.linear1(xs))))))
             xs = grad_reverse(grad_reverse(self.linear2(xs)))
         else:
             xs = torch.flatten(x, 1)
-            xs = F.leaky_relu(self.linear0(xs))
-            xs = F.leaky_relu(self.linear1(xs))
+            xs = F.leaky_relu(self.linear_bn0(self.linear0(xs)))
+            xs = F.leaky_relu(self.linear_bn1(self.linear1(xs)))
             xs = self.linear2(xs)
     
         return xs
