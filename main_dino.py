@@ -507,12 +507,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
             if not args.test_mode:
                 optimizer.step()
-                print("optimizer step")
             
             if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
                 rpn_optimizer.step()
-                if args.test_mode:
-                    print("rpn step")
 
             # if it % args.grad_check_freq == 0:
             print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
