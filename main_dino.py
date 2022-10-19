@@ -530,7 +530,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 rpn_optimizer.zero_grad()
                 optimizer.zero_grad()
                 
-                images_test_mode = rpn(images_test_mode, invert_rpn_gradients=False)
+                images_test_mode = rpn(images_test_mode, invert_rpn_gradients=True)
                 teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
                 student_output = student(images_test_mode)
                 loss = dino_loss(student_output, teacher_output, epoch)
