@@ -511,40 +511,40 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
                 rpn_optimizer.step()
 
-            # if it % args.grad_check_freq == 0:
-            print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
-            if args.separate_localization_net:
-                print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
-            else:
-                print(rpn.module.transform_net.localization_net.conv2d_2.weight)
-            print("--------------------------------------------------------")
-            print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-            
-            if args.test_mode:
-                # torch.use_deterministic_algorithms(False, warn_only=True)
-                inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-            
-                rpn_optimizer.zero_grad()
-                optimizer.zero_grad()
-                
-                images_test_mode = rpn(images_test_mode, invert_rpn_gradients=True)
-                teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
-                student_output = student(images_test_mode)
-                loss = dino_loss(student_output, teacher_output, epoch)
-                loss.backward()
-                
-                torch.distributed.barrier()
+            if it % args.grad_check_freq == 0:
+                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+                if args.separate_localization_net:
+                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
+                else:
+                    print(rpn.module.transform_net.localization_net.conv2d_2.weight)
+                print("--------------------------------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-                not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-                print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
-                # break
-            
-            if args.separate_localization_net:
-                print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
-            else:
-                print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
-            print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-            print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
+                
+                if args.test_mode:
+                    # torch.use_deterministic_algorithms(False, warn_only=True)
+                    inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
+                
+                    rpn_optimizer.zero_grad()
+                    optimizer.zero_grad()
+                    
+                    images_test_mode = rpn(images_test_mode, invert_rpn_gradients=True)
+                    teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
+                    student_output = student(images_test_mode)
+                    loss = dino_loss(student_output, teacher_output, epoch)
+                    loss.backward()
+                    
+                    torch.distributed.barrier()
+                    print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+                    not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
+                    print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
+                    # break
+                
+                if args.separate_localization_net:
+                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
+                else:
+                    print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
+                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
         else:
             fp16_scaler.scale(loss).backward()
@@ -561,7 +561,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 
             fp16_scaler.update()
             
-            # if it % args.grad_check_freq == 0 and not pretrained_rpn:
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 if args.separate_localization_net:
