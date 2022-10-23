@@ -479,8 +479,6 @@ def setup_for_distributed(is_master):
 
 
 def init_distributed_mode(args, rank):
-    # print(os.environ)
-    # launched with torch.distributed.launch
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         # print("1")
         args.rank = int(os.environ["RANK"])
