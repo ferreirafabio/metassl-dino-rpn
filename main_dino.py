@@ -485,6 +485,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
+            if args.use_theta_distance_loss:
+                loss_g1g2, loss_l1l2 = compute_theta_losses(thetas)
+                
+            loss = loss + loss_g1g2 + loss_l1l2
             
             summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
             summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
@@ -615,13 +619,15 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
 def compute_theta_losses(thetas):
     assert len(thetas) == 4
-    g1 = thetas[0]
-    g2 = thetas[1]
-    l1 = thetas[2]
-    l2 = thetas[3]
-    
-    # return loss_l1l2, loss_g1g2
 
+    loss_g1g2 = torch.sub(torch.abs(thetas[0]), torch.abs(thetas[1]))
+    print(loss_g1g2.shape)
+    loss_g1g2 = loss_g1g2.mean()
+
+    print(loss_g1g2.shape)
+    
+    return loss_g1g2
+    
 
 class DINOLoss(nn.Module):
     def __init__(self, out_dim, ncrops, warmup_teacher_temp, teacher_temp,
@@ -654,8 +660,6 @@ class DINOLoss(nn.Module):
 
         total_loss = 0
         n_loss_terms = 0
-        print(teacher_out[0].shape)
-        print(student_out[1].shape)
         for iq, q in enumerate(teacher_out):
             for v in range(len(student_out)):
                 if v == iq:
