@@ -626,7 +626,7 @@ def compute_theta_losses(thetas):
 
     print(loss_g1g2.shape)
     
-    return loss_g1g2
+    return loss_g1g2, loss_g1g2
     
 
 class DINOLoss(nn.Module):
