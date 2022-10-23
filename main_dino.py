@@ -619,17 +619,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 def compute_theta_losses(thetas):
     assert len(thetas) == 4
 
-    loss_g1g2 = torch.sum(torch.sub(torch.abs(thetas[0]), torch.abs(thetas[1])), dim=(1, 2))
-    # print(loss_g1g2.shape)
-    loss_g2g1 = torch.sum(torch.sub(torch.abs(thetas[1]), torch.abs(thetas[0])), dim=(1, 2))
-    loss_g = loss_g1g2 + loss_g2g1
+    loss_g = torch.sum(torch.sub(torch.abs(thetas[0]), torch.abs(thetas[1])), dim=(1, 2))
     loss_g = loss_g.mean(dim=-1)
     
     print(loss_g)
 
-    loss_l2l1 = torch.sum(torch.sub(torch.abs(thetas[3]), torch.abs(thetas[2])), dim=(1, 2))
-    loss_l1l2 = torch.sum(torch.sub(torch.abs(thetas[2]), torch.abs(thetas[3])), dim=(1, 2))
-    loss_l = loss_l1l2 + loss_l2l1
+    loss_l = torch.sum(torch.sub(torch.abs(thetas[2]), torch.abs(thetas[3])), dim=(1, 2))
     loss_l = loss_l.mean(dim=-1)
     print(loss_l)
     
