@@ -375,7 +375,7 @@ class AugmentationNetwork(nn.Module):
         theta_l2s = torch.stack(theta_l2_list, 0)
 
         del global_views1_list, global_views2_list, local_views1_list, local_views2_list
-        del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+        del theta_g1_list, theta_g2_list, theta_l1_list, theta_l2_list
 
         return [global_views1, global_views2, local_views1, local_views2], [theta_g1s, theta_g2s, theta_l1s, theta_l2s]
     

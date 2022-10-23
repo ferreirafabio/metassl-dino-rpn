@@ -615,11 +615,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 def compute_theta_losses(thetas):
     assert len(thetas) == 4
     g1 = thetas[0]
-    g2 = thetas[0]
-    l1 = thetas[0]
-    l2 = thetas[0]
+    g2 = thetas[1]
+    l1 = thetas[2]
+    l2 = thetas[3]
     
-    return loss_l1l2, loss_g1g2
+    # return loss_l1l2, loss_g1g2
 
 
 class DINOLoss(nn.Module):
