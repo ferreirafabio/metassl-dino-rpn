@@ -153,6 +153,7 @@ def get_args_parser():
     parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
     parser.add_argument("--use_bn", default=False, type=utils.bool_flag, help="Set this flag to activate BatchNorm in RPN.")
+    parser.add_argument("--use_theta_distance_loss", default=False, type=utils.bool_flag, help="Set this flag to maximize the distances between the RPN thetas.")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -653,8 +654,8 @@ class DINOLoss(nn.Module):
 
         total_loss = 0
         n_loss_terms = 0
-        print(teacher_out.shape)
-        print(student_out.shape)
+        print(teacher_out[0].shape)
+        print(student_out[1].shape)
         for iq, q in enumerate(teacher_out):
             for v in range(len(student_out)):
                 if v == iq:
