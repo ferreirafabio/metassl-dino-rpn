@@ -487,7 +487,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             loss = dino_loss(student_output, teacher_output, epoch)
             if args.use_theta_distance_loss:
                 loss_g, loss_l = compute_theta_losses(thetas)
-                # loss = loss + loss_g1g2 + loss_l1l2
+                loss = loss + loss_g + loss_l
             
             summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
             summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
