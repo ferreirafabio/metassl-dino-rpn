@@ -464,7 +464,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            images = rpn(images, invert_rpn_gradients=args.invert_rpn_gradients)
+            images, thetas = rpn(images, invert_rpn_gradients=args.invert_rpn_gradients)
             
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
@@ -537,7 +537,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     rpn_optimizer.zero_grad()
                     optimizer.zero_grad()
                     
-                    images_test_mode = rpn(images_test_mode, invert_rpn_gradients=True)
+                    images_test_mode, _ = rpn(images_test_mode, invert_rpn_gradients=True)
                     teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
                     student_output = student(images_test_mode)
                     loss = dino_loss(student_output, teacher_output, epoch)
@@ -612,6 +612,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+def compute_theta_losses(thetas):
+    assert len(thetas) == 4
+    g1 = thetas[0]
+    g2 = thetas[0]
+    l1 = thetas[0]
+    l2 = thetas[0]
+    
+    return loss_l1l2, loss_g1g2
+
+
 class DINOLoss(nn.Module):
     def __init__(self, out_dim, ncrops, warmup_teacher_temp, teacher_temp,
                  warmup_teacher_temp_epochs, nepochs, student_temp=0.1,
@@ -643,6 +653,8 @@ class DINOLoss(nn.Module):
 
         total_loss = 0
         n_loss_terms = 0
+        print(teacher_out.shape)
+        print(student_out.shape)
         for iq, q in enumerate(teacher_out):
             for v in range(len(student_out)):
                 if v == iq:

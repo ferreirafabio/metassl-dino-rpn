@@ -299,6 +299,7 @@ class STN(nn.Module):
         self.affine_matrix_g2 = theta_g2.cpu().detach().numpy()
         self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
         self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
+        
         # print(f"theta g1: {theta_g1}")
         # print(f"theta g2: {theta_g2}")
         # print(f"theta l1: {theta_l1}")
@@ -316,7 +317,7 @@ class STN(nn.Module):
         gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [96, 96])
         l2 = F.grid_sample(x, gridl2)
         
-        return [g1, g2, l1, l2]
+        return [g1, g2, l1, l2], [theta_g1, theta_g2, theta_l1, theta_l2]
         
     
 class AugmentationNetwork(nn.Module):
@@ -326,7 +327,8 @@ class AugmentationNetwork(nn.Module):
         self.transform_net = transform_net
 
     def forward(self, imgs, invert_rpn_gradients):
-        global_views1_augmented, global_views2_augmented, local_views1_augmented, local_views2_augmented = [], [], [], []
+        global_views1_list, global_views2_list, local_views1_list, local_views2_list = [], [], [], []
+        theta_g1_list, theta_g2_list, theta_l1_list, theta_l2_list = [], [], [], []
         
         # since we have list of images with varying resolution, we need to transform them individually
         for img in imgs:
@@ -340,27 +342,40 @@ class AugmentationNetwork(nn.Module):
             if invert_rpn_gradients:
                 img = grad_reverse(img)
                 
-            global_local_views = self.transform_net(img, invert_rpn_gradients=invert_rpn_gradients)
+            global_local_views, thetas = self.transform_net(img, invert_rpn_gradients=invert_rpn_gradients)
             
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
             l1_augmented = torch.squeeze(global_local_views[2], 0)
             l2_augmented = torch.squeeze(global_local_views[3], 0)
-
-            global_views1_augmented.append(g1_augmented)
-            global_views2_augmented.append(g2_augmented)
-            local_views1_augmented.append(l1_augmented)
-            local_views2_augmented.append(l2_augmented)
             
-        global_views1 = torch.stack(global_views1_augmented, 0)
-        global_views2 = torch.stack(global_views2_augmented, 0)
-        local_views1 = torch.stack(local_views1_augmented, 0)
-        local_views2 = torch.stack(local_views2_augmented, 0)
+            theta_g1 = torch.squeeze(thetas[0], 0)
+            theta_g2 = torch.squeeze(thetas[1], 0)
+            theta_l1 = torch.squeeze(thetas[2], 0)
+            theta_l2 = torch.squeeze(thetas[3], 0)
 
-        del global_views1_augmented
-        del global_views2_augmented
-        del local_views1_augmented
-        del local_views2_augmented
+            global_views1_list.append(g1_augmented)
+            global_views2_list.append(g2_augmented)
+            local_views1_list.append(l1_augmented)
+            local_views2_list.append(l2_augmented)
 
-        return [global_views1, global_views2, local_views1, local_views2]
+            theta_g1_list.append(theta_g1)
+            theta_g2_list.append(theta_g2)
+            theta_l1_list.append(theta_l1)
+            theta_l2_list.append(theta_l2)
+            
+        global_views1 = torch.stack(global_views1_list, 0)
+        global_views2 = torch.stack(global_views2_list, 0)
+        local_views1 = torch.stack(local_views1_list, 0)
+        local_views2 = torch.stack(local_views2_list, 0)
+        
+        theta_g1s = torch.stack(theta_g1_list, 0)
+        theta_g2s = torch.stack(theta_g2_list, 0)
+        theta_l1s = torch.stack(theta_l1_list, 0)
+        theta_l2s = torch.stack(theta_l2_list, 0)
+
+        del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+        del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+
+        return [global_views1, global_views2, local_views1, local_views2], [theta_g1s, theta_g2s, theta_l1s, theta_l2s]
     
