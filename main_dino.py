@@ -154,6 +154,7 @@ def get_args_parser():
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
     parser.add_argument("--use_bn", default=False, type=utils.bool_flag, help="Set this flag to activate BatchNorm in RPN.")
     parser.add_argument("--use_theta_distance_loss", default=False, type=utils.bool_flag, help="Set this flag to maximize the distances between the RPN thetas.")
+    parser.add_argument("--use_one_res", default=False, type=utils.bool_flag, help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -241,7 +242,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(stn_mode=args.stn_mode, separate_localization_net=args.separate_localization_net, deep_loc_net=args.deep_loc_net, use_bn=args.use_bn)
+    transform_net = STN(stn_mode=args.stn_mode, separate_localization_net=args.separate_localization_net, deep_loc_net=args.deep_loc_net, use_bn=args.use_bn, use_one_res=args.use_one_res)
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions

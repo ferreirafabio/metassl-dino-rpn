@@ -128,13 +128,14 @@ class STN(nn.Module):
     """"
     Spatial Transformer Network with a ResNet localization backbone
     """""
-    def __init__(self, stn_mode='affine', separate_localization_net=False, deep_loc_net=False, use_bn=False):
+    def __init__(self, stn_mode='affine', separate_localization_net=False, deep_loc_net=False, use_bn=False, use_one_res=False):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
         self.separate_localization_net = separate_localization_net
         self.deep_loc_net = deep_loc_net
         self.use_bn = use_bn
+        self.use_one_res = use_one_res
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None
         self.affine_matrix_l1 = None
@@ -305,16 +306,22 @@ class STN(nn.Module):
         # print(f"theta l1: {theta_l1}")
         # print(f"theta l2: {theta_l2}")
         
-        gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [224, 224])
+        high_res = 224
+        low_res = 96
+        one_res = 128
+        if self.use_one_res:
+            low_res, high_res = one_res
+        
+        gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [high_res, high_res])
         g1 = F.grid_sample(x, gridg1)
 
-        gridg2 = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [224, 224])
+        gridg2 = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [high_res, high_res])
         g2 = F.grid_sample(x, gridg2)
 
-        gridl1 = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [96, 96])
+        gridl1 = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [low_res, low_res])
         l1 = F.grid_sample(x, gridl1)
 
-        gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [96, 96])
+        gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [low_res, low_res])
         l2 = F.grid_sample(x, gridl2)
         
         return [g1, g2, l1, l2], [theta_g1, theta_g2, theta_l1, theta_l2]
