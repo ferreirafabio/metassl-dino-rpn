@@ -310,7 +310,7 @@ class STN(nn.Module):
         low_res = 96
         one_res = 128
         if self.use_one_res:
-            low_res, high_res = one_res
+            low_res, high_res = one_res, one_res
         
         gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [high_res, high_res])
         g1 = F.grid_sample(x, gridg1)
