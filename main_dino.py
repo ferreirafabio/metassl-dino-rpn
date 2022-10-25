@@ -622,10 +622,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 def compute_theta_losses(thetas):
     assert len(thetas) == 4
 
-    loss_g = torch.log(torch.sum(torch.sub(torch.abs(thetas[0]), torch.abs(thetas[1])), dim=(1, 2)))
+    loss_g = torch.sum(torch.sub(torch.abs(thetas[0]), torch.abs(thetas[1])), dim=(1, 2))
     loss_g = loss_g.mean(dim=-1)
 
-    loss_l = torch.log(torch.sum(torch.sub(torch.abs(thetas[2]), torch.abs(thetas[3])), dim=(1, 2)))
+    loss_l = torch.sum(torch.sub(torch.abs(thetas[2]), torch.abs(thetas[3])), dim=(1, 2))
     loss_l = loss_l.mean(dim=-1)
     
     return loss_g, loss_l

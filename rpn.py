@@ -85,8 +85,8 @@ class LocalizationNet(nn.Module):
             xs = grad_reverse(x)
             xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_bn1(grad_reverse(self.conv2d_1(xs)))))))
             if self.deep:
-                xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(xs)))))
-                xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep(xs)))))
+                xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep_bn1(grad_reverse(self.conv2d_deep(xs)))))))
+                xs = grad_reverse(self.maxpool2d(F.leaky_relu(grad_reverse(self.conv2d_deep_bn2(grad_reverse(self.conv2d_deep(xs)))))))
             xs = grad_reverse(self.avgpool(F.leaky_relu(grad_reverse(self.conv2d_bn2(grad_reverse(self.conv2d_2(xs)))))))
         else:
             xs = self.maxpool2d(F.leaky_relu(self.conv2d_bn1(self.conv2d_1(x))))
