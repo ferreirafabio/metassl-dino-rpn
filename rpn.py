@@ -65,6 +65,7 @@ class LocalizationNet(nn.Module):
         self.use_bn = use_bn
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
+        
         if self.use_bn:
             self.conv2d_bn1 = nn.BatchNorm2d(conv1_depth)
             self.conv2d_bn2 = nn.BatchNorm2d(conv2_depth)
@@ -73,7 +74,8 @@ class LocalizationNet(nn.Module):
             self.conv2d_bn2 = nn.Identity()
         
         if self.deep:
-            self.conv2d_deep = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
+            self.conv2d_deep1 = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
+            self.conv2d_deep2 = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
             self.cnv2d_deep_bn1 = nn.BatchNorm2d(conv1_depth)
             self.cnv2d_deep_bn2 = nn.BatchNorm2d(conv1_depth)
             
@@ -85,8 +87,8 @@ class LocalizationNet(nn.Module):
         xs = self.maxpool2d(F.leaky_relu(self.conv2d_bn1(self.conv2d_1(x))))
 
         if self.deep:
-            xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn1(self.conv2d_deep(xs))))
-            xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn2(self.conv2d_deep(xs))))
+            xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn1(self.conv2d_deep1(xs))))
+            xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn2(self.conv2d_deep2(xs))))
 
         if self.invert_rpn_gradients:
             xs = grad_reverse(self.avgpool(F.leaky_relu(self.conv2d_bn2(self.conv2d_2(xs)))))
@@ -143,10 +145,10 @@ class STN(nn.Module):
         if self.separate_localization_net:
             conv1_depth = 8  # earlier: 16
             conv2_depth = 16  # earlier: 8
-            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
-            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
-            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
-            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
+            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
+            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
+            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
+            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, use_bn=self.use_bn, invert_rpn_gradients=self.invert_rpn_gradients)
         else:
             if self.deep_loc_net:
                 conv1_depth = 32
