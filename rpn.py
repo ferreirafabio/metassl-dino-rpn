@@ -135,20 +135,18 @@ class STN(nn.Module):
         
         # Spatial transformer localization-network
         if self.separate_localization_net:
-            conv1_depth = 8  # earlier: 16
-            conv2_depth = 16  # earlier: 8
+            conv1_depth = 8
+            conv2_depth = 16
             self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
             self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
             self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
             self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
         else:
+            conv1_depth = 32
+            conv2_depth = 64
             if self.deep_loc_net:
-                conv1_depth = 32
-                conv2_depth = 64
                 self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=True, invert_rpn_gradients=self.invert_rpn_gradients)
             else:
-                conv1_depth = 32  # earlier: 32
-                conv2_depth = 64  # earlier: 16
                 self.localization_net = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
 
         # Regressors for the 3 * 2 affine matrix
