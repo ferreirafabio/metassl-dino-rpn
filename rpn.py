@@ -214,13 +214,19 @@ class STN(nn.Module):
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
             
     def _get_stn_mode_theta(self, theta, x):
+        # print(theta.shape) # torch.Size([1, 6])
+        # print(theta)
         if self.stn_mode == 'affine':
             theta_new = theta.view(-1, 2, 3)
+            # print(theta_new.shape) # torch.Size([1, 2, 3])
         else:
             theta_new = torch.zeros([x.size(0), 2, 3], dtype=torch.float32, device=x.get_device(), requires_grad=True)
             theta_new = theta_new + 0
             theta_new[:, 0, 0] = 1.0
             theta_new[:, 1, 1] = 1.0
+            print(theta_new.shape)
+            print(theta_new)
+            print(x.shape)
             if self.stn_mode == 'translation':
                 theta_new[:, 0, 2] = theta[:, 0]
                 theta_new[:, 1, 2] = theta[:, 1]
