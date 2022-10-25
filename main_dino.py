@@ -242,7 +242,13 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     else:
         print(f"Unknown architecture: {args.arch}")
         
-    transform_net = STN(stn_mode=args.stn_mode, separate_localization_net=args.separate_localization_net, deep_loc_net=args.deep_loc_net, use_bn=args.use_bn, use_one_res=args.use_one_res)
+    transform_net = STN(stn_mode=args.stn_mode,
+                        separate_localization_net=args.separate_localization_net,
+                        invert_rpn_gradients=args.invert_rpn_gradients,
+                        deep_loc_net=args.deep_loc_net,
+                        use_bn=args.use_bn, use_one_res
+                        =args.use_one_res
+                        )
     rpn = AugmentationNetwork(transform_net=transform_net)
     
     # multi-crop wrapper handles forward with inputs of different resolutions
@@ -466,7 +472,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            images, thetas = rpn(images, invert_rpn_gradients=args.invert_rpn_gradients)
+            images, thetas = rpn(images)
             
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
@@ -536,25 +542,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 print("-------------------------sanity check global grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
-                
-                if args.test_mode:
-                    # torch.use_deterministic_algorithms(False, warn_only=True)
-                    inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-                
-                    rpn_optimizer.zero_grad()
-                    optimizer.zero_grad()
-                    
-                    images_test_mode, _ = rpn(images_test_mode, invert_rpn_gradients=True)
-                    teacher_output = teacher(images_test_mode[:2])  # only the 2 global views pass through the teacher
-                    student_output = student(images_test_mode)
-                    loss = dino_loss(student_output, teacher_output, epoch)
-                    loss.backward()
-                    
-                    torch.distributed.barrier()
-                    print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-                    not_inverted_grads_l1 = rpn.module.transform_net.fc_localization_local1.linear2.weight.grad.cpu().data.numpy()
-                    print(f"arrays are equal: {np.isclose(inverted_grads_l1, not_inverted_grads_l1)}")
-                    # break
                 
                 if args.separate_localization_net:
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
