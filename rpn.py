@@ -69,8 +69,8 @@ class LocalizationNet(nn.Module):
         if self.deep:
             self.conv2d_deep1 = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
             self.conv2d_deep2 = nn.Conv2d(conv1_depth, conv1_depth, kernel_size=3, padding=2)
-            self.cnv2d_deep_bn1 = nn.BatchNorm2d(conv1_depth)
-            self.cnv2d_deep_bn2 = nn.BatchNorm2d(conv1_depth)
+            self.conv2d_deep_bn1 = nn.BatchNorm2d(conv1_depth)
+            self.conv2d_deep_bn2 = nn.BatchNorm2d(conv1_depth)
             
         self.conv2d_2 = nn.Conv2d(conv1_depth, conv2_depth, kernel_size=3, padding=2)
         self.conv2d_bn2 = nn.BatchNorm2d(conv2_depth)
