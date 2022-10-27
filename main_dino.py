@@ -152,7 +152,6 @@ def get_args_parser():
     parser.add_argument("--grad_check_freq", default=5000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
     parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
-    parser.add_argument("--use_theta_distance_loss", default=False, type=utils.bool_flag, help="Set this flag to maximize the distances between the RPN thetas.")
     parser.add_argument("--use_one_res", default=False, type=utils.bool_flag, help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
     parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag, help="Set this flag to not use a tanh in the last STN layer.")
     
@@ -472,7 +471,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            images, thetas = rpn(images)
+            images = rpn(images)
             
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
@@ -492,11 +491,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
-            if args.use_theta_distance_loss:
-                loss_g, loss_l = compute_theta_losses(thetas)
-                loss = loss + loss_g + loss_l
-                summary_writer.write_scalar(tag="loss_theta_global_diff", scalar_value=loss_g.item(), global_step=it)
-                summary_writer.write_scalar(tag="loss_theta_local_diff", scalar_value=loss_l.item(), global_step=it)
                 
             summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
             summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
@@ -604,18 +598,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
-def compute_theta_losses(thetas):
-    assert len(thetas) == 4
-
-    loss_g = torch.sum(torch.sub(torch.abs(thetas[0]), torch.abs(thetas[1])), dim=(1, 2))
-    loss_g = loss_g.mean(dim=-1)
-
-    loss_l = torch.sum(torch.sub(torch.abs(thetas[2]), torch.abs(thetas[3])), dim=(1, 2))
-    loss_l = loss_l.mean(dim=-1)
-    
-    return loss_g, loss_l
     
 
 class DINOLoss(nn.Module):
