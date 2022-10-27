@@ -364,7 +364,7 @@ class AugmentationNetwork(nn.Module):
             except Exception as e:
                 print(e)
                 
-            global_local_views, thetas = self.transform_net(img)
+            global_local_views = self.transform_net(img)
             
             g1_augmented = torch.squeeze(global_local_views[0], 0)
             g2_augmented = torch.squeeze(global_local_views[1], 0)
