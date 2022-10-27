@@ -154,6 +154,10 @@ def get_args_parser():
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
     parser.add_argument("--use_one_res", default=False, type=utils.bool_flag, help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
     parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag, help="Set this flag to not use a tanh in the last STN layer.")
+
+    # parser.add_argument("--delay_rpn_by_epochs", default=0, type=int, help="Specifies by how many epochs the RPN should be delayed (i.e. for how many epochs not used). During this time, the standard"
+    #                                                                         "transformations are applied (default: 0).")
+    parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -211,8 +215,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         pin_memory=True,
         drop_last=True,
         collate_fn=custom_collate,
-    )
-    
+        )
 
     print(f"Data loaded: there are {len(dataset)} images.")
 
@@ -359,7 +362,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             args.rpnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
-            warmup_epochs=args.warmup_epochs,
+            warmup_epochs=args.rpn_warmup_epochs,
             )
     
     # momentum parameter is increased to 1. during training with a cosine schedule
@@ -465,10 +468,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if it % args.summary_writer_freq == 0:
             uncropped_images = copy.deepcopy(images)
             
-        if args.test_mode:
-            images_test_mode = copy.deepcopy(images)
-            print(f"images_test_mode is cuda: {images_test_mode[0].is_cuda}")
-            
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
@@ -518,11 +517,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
-
-            if not args.test_mode:
-                optimizer.step()
             
-            if args.use_rpn_optimizer and not use_pretrained_rpn and not args.test_mode:
+            optimizer.step()
+            
+            if args.use_rpn_optimizer and not use_pretrained_rpn:
                 rpn_optimizer.step()
 
             if it % args.grad_check_freq == 0:
