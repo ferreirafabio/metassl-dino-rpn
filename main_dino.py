@@ -144,7 +144,7 @@ def get_args_parser():
                                                                          "annealed with cosine and no warmup")
     parser.add_argument('--stn_mode', default='affine', type=str, help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
                                                                        'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
-    parser.add_argument("--rpnlr", default=1e-3, type=float, help="""Learning rate at the end of
+    parser.add_argument("--rpnlr", default=5e-4, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag, help="Set this flag to use a separate localization network for each head.")
@@ -154,6 +154,7 @@ def get_args_parser():
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
     parser.add_argument("--use_theta_distance_loss", default=False, type=utils.bool_flag, help="Set this flag to maximize the distances between the RPN thetas.")
     parser.add_argument("--use_one_res", default=False, type=utils.bool_flag, help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
+    parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag, help="Set this flag to not use a tanh in the last STN layer.")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -245,7 +246,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                         separate_localization_net=args.separate_localization_net,
                         invert_rpn_gradients=args.invert_rpn_gradients,
                         deep_loc_net=args.deep_loc_net,
-                        use_one_res=args.use_one_res
+                        use_one_res=args.use_one_res,
+                        use_unbounded_stn=args.use_unbounded_stn
                         )
     rpn = AugmentationNetwork(transform_net=transform_net)
     
