@@ -151,13 +151,12 @@ def get_args_parser():
     parser.add_argument("--summary_writer_freq", default=5000, type=int, help="Defines the number of iterations the summary writer will write output.")
     parser.add_argument("--grad_check_freq", default=5000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
     parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
-    parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net.")
+    parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net (default: False).")
     parser.add_argument("--use_one_res", default=False, type=utils.bool_flag, help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
-    parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag, help="Set this flag to not use a tanh in the last STN layer.")
-
-    # parser.add_argument("--delay_rpn_by_epochs", default=0, type=int, help="Specifies by how many epochs the RPN should be delayed (i.e. for how many epochs not used). During this time, the standard"
-    #                                                                         "transformations are applied (default: 0).")
+    parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag, help="Set this flag to not use a tanh in the last STN layer (default: use bounded RPN).")
     parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
+    parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
+    parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -249,7 +248,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                         invert_rpn_gradients=args.invert_rpn_gradients,
                         deep_loc_net=args.deep_loc_net,
                         use_one_res=args.use_one_res,
-                        use_unbounded_stn=args.use_unbounded_stn
+                        use_unbounded_stn=args.use_unbounded_stn,
+                        conv1_depth=args.rpn_conv1_depth,
+                        conv2_depth=args.rpn_conv2_depth,
                         )
     rpn = AugmentationNetwork(transform_net=transform_net)
     
