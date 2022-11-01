@@ -112,9 +112,9 @@ class LocHead(nn.Module):
         xs = F.leaky_relu(self.linear1(xs))
 
         if self.invert_rpn_gradients:
-            xs = grad_reverse(self.linear2(xs) if self.use_unbounded_stn else torch.tanh(self.linear2(xs)))
+            xs = grad_reverse(self.linear2(xs))
         else:
-            xs = self.linear2(xs) if self.use_unbounded_stn else torch.tanh(self.linear2(xs))
+            xs = self.linear2(xs)
             
         return xs
     
@@ -244,6 +244,7 @@ class STN(nn.Module):
     def _get_stn_mode_theta(self, theta, x):
         # print(theta.shape) # torch.Size([1, 6])
         if self.stn_mode == 'affine':
+            theta[:, 1:] = theta[:, 1:] if self.use_unbounded_stn else torch.tanh(theta[:, 1:])  # optionally bound everything except for the angle at [:, 0]
             theta_new = theta.view(-1, 2, 3)
             # print(theta_new.shape) # torch.Size([1, 2, 3])
         else:
@@ -252,47 +253,47 @@ class STN(nn.Module):
             theta_new[:, 0, 0] = 1.0
             theta_new[:, 1, 1] = 1.0
             if self.stn_mode == 'translation':
-                theta_new[:, 0, 2] = theta[:, 0]
-                theta_new[:, 1, 2] = theta[:, 1]
+                theta_new[:, 0, 2] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
+                theta_new[:, 1, 2] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
             elif self.stn_mode == 'rotation':
-                angle = theta[:, 0]
+                angle = theta[:, 0]  # leave unbounded
                 theta_new[:, 0, 0] = torch.cos(angle)
                 theta_new[:, 0, 1] = -torch.sin(angle)
                 theta_new[:, 1, 0] = torch.sin(angle)
                 theta_new[:, 1, 1] = torch.cos(angle)
             elif self.stn_mode == 'scale':
-                theta_new[:, 0, 0] = theta[:, 0]
-                theta_new[:, 1, 1] = theta[:, 1]
+                theta_new[:, 0, 0] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
+                theta_new[:, 1, 1] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
             elif self.stn_mode == 'shear':
-                theta_new[:, 0, 1] = theta[:, 0]
-                theta_new[:, 1, 0] = theta[:, 1]
+                theta_new[:, 0, 1] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
+                theta_new[:, 1, 0] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
             elif self.stn_mode == 'rotation_scale':
-                angle = theta[:, 0]
-                theta_new[:, 0, 0] = torch.cos(angle) * theta[:, 1]
+                angle = theta[:, 0]  # leave unbounded
+                theta_new[:, 0, 0] = torch.cos(angle) * (theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1]))
                 theta_new[:, 0, 1] = -torch.sin(angle)
                 theta_new[:, 1, 0] = torch.sin(angle)
-                theta_new[:, 1, 1] = torch.cos(angle) * theta[:, 2]
+                theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 2] if self.use_unbounded_stn else torch.tanh(theta[:, 2]))
             elif self.stn_mode == 'translation_scale':
-                theta_new[:, 0, 2] = theta[:, 0]
-                theta_new[:, 1, 2] = theta[:, 1]
-                theta_new[:, 0, 0] = theta[:, 2]
-                theta_new[:, 1, 1] = theta[:, 3]
+                theta_new[:, 0, 2] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
+                theta_new[:, 1, 2] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
+                theta_new[:, 0, 0] = theta[:, 2] if self.use_unbounded_stn else torch.tanh(theta[:, 2])
+                theta_new[:, 1, 1] = theta[:, 3] if self.use_unbounded_stn else torch.tanh(theta[:, 3])
             elif self.stn_mode == 'rotation_translation':
-                angle = theta[:, 0]
+                angle = theta[:, 0]  # leave unbounded
                 theta_new[:, 0, 0] = torch.cos(angle)
                 theta_new[:, 0, 1] = -torch.sin(angle)
                 theta_new[:, 1, 0] = torch.sin(angle)
                 theta_new[:, 1, 1] = torch.cos(angle)
-                theta_new[:, 0, 2] = theta[:, 1]
-                theta_new[:, 1, 2] = theta[:, 2]
+                theta_new[:, 0, 2] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
+                theta_new[:, 1, 2] = theta[:, 2] if self.use_unbounded_stn else torch.tanh(theta[:, 2])
             elif self.stn_mode == 'rotation_translation_scale':
-                angle = theta[:, 0]
-                theta_new[:, 0, 0] = torch.cos(angle) * theta[:, 3]
+                angle = theta[:, 0]  # leave unbounded
+                theta_new[:, 0, 0] = torch.cos(angle) * (theta[:, 3] if self.use_unbounded_stn else torch.tanh(theta[:, 3]))
                 theta_new[:, 0, 1] = -torch.sin(angle)
                 theta_new[:, 1, 0] = torch.sin(angle)
-                theta_new[:, 1, 1] = torch.cos(angle) * theta[:, 4]
-                theta_new[:, 0, 2] = theta[:, 1]
-                theta_new[:, 1, 2] = theta[:, 2]
+                theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 4] if self.use_unbounded_stn else torch.tanh(theta[:, 4]))
+                theta_new[:, 0, 2] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
+                theta_new[:, 1, 2] = theta[:, 2] if self.use_unbounded_stn else torch.tanh(theta[:, 2])
         
         return theta_new
     
