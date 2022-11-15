@@ -403,8 +403,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     if use_pretrained_rpn:
         for p in rpn.parameters():
             p.requires_grad = False
-
-    summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
+    
+    if torch.distributed.get_rank() == 0:
+        summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
 
     start_time = time.time()
     print("Starting DINO training !")
@@ -466,7 +467,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
         
-        if it % args.summary_writer_freq == 0:
+        if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
             uncropped_images = copy.deepcopy(images)
             
         # teacher and student forward passes + compute dino loss
@@ -491,12 +492,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
-                
-            summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
-            summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
-            if args.use_rpn_optimizer and not use_pretrained_rpn:
-                summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"], global_step=it)
-            summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"], global_step=it)
+            
+            if torch.distributed.get_rank() == 0:
+                summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
+                summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
+                if args.use_rpn_optimizer and not use_pretrained_rpn:
+                    summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"], global_step=it)
+                summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"], global_step=it)
             
             metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
