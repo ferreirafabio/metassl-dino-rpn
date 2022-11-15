@@ -34,7 +34,8 @@ N_PARAMS = {
         'rotation_scale': 3,
         'translation_scale': 4,
         'rotation_translation': 3,
-        'rotation_translation_scale': 5
+        'rotation_translation_scale': 5,
+        'rotation_scale_symmetric': 2,
     }
 
 
@@ -240,6 +241,11 @@ class STN(nn.Module):
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1, 1], dtype=torch.float))
+        elif self.stn_mode == 'rotation_scale_symmetric':
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
             
     def _get_stn_mode_theta(self, theta, x):
         # print(theta.shape) # torch.Size([1, 6])
@@ -256,7 +262,7 @@ class STN(nn.Module):
                 theta_new[:, 0, 2] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
                 theta_new[:, 1, 2] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
             elif self.stn_mode == 'rotation':
-                angle = theta[:, 0]  # leave unbounded
+                angle = theta[:, 0]  # leave unbounded<
                 theta_new[:, 0, 0] = torch.cos(angle)
                 theta_new[:, 0, 1] = -torch.sin(angle)
                 theta_new[:, 1, 0] = torch.sin(angle)
@@ -294,6 +300,13 @@ class STN(nn.Module):
                 theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 4] if self.use_unbounded_stn else torch.tanh(theta[:, 4]))
                 theta_new[:, 0, 2] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
                 theta_new[:, 1, 2] = theta[:, 2] if self.use_unbounded_stn else torch.tanh(theta[:, 2])
+            elif self.stn_mode == 'rotation_scale_symmetric':
+                # rotation_scale sometimes leads to strong distortions along only one axis (x or y), this is used to make the scaling symmetric along both axes
+                angle = theta[:, 0]  # leave unbounded
+                theta_new[:, 0, 0] = torch.cos(angle) * (theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1]))
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1]))
         
         return theta_new
     
