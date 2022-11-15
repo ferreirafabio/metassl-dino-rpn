@@ -404,6 +404,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         for p in rpn.parameters():
             p.requires_grad = False
     
+    summary_writer = None
     if torch.distributed.get_rank() == 0:
         summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
 
