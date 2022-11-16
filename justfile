@@ -12,6 +12,12 @@
    mkdir -p /work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn/experiments/{{EXPERIMENT_NAME}}/cluster_oe/
    sbatch --output=/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn/experiments/{{EXPERIMENT_NAME}}/cluster_oe/%x.%A.%a.%N.err_out --error=/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn/experiments/{{EXPERIMENT_NAME}}/cluster_oe/%x.%A.%a.%N.err_out --export=EXPERIMENT_NAME={{EXPERIMENT_NAME}},BATCH_SIZE={{BATCH_SIZE}},EPOCHS={{EPOCHS}},WARMUP_EPOCHS={{WARMUP_EPOCHS}},INVERT_GRADIENTS={{INVERT_GRADIENTS}},USE_RPN_OPTIMIZER={{USE_RPN_OPTIMIZER}},SEPARATE_LOCAL_NET={{SEPARATE_LOCAL_NET}},STN_MODE={{STN_MODE}} cluster/run_rpn.sh
 
+# DINO RPN (NORMAL)
+@dino_rpn_unbounded EXPERIMENT_NAME BATCH_SIZE EPOCHS WARMUP_EPOCHS INVERT_GRADIENTS USE_RPN_OPTIMIZER SEPARATE_LOCAL_NET STN_MODE:
+   #!/usr/bin/env zsh
+   mkdir -p /work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn/experiments/{{EXPERIMENT_NAME}}/cluster_oe/
+   sbatch --output=/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn/experiments/{{EXPERIMENT_NAME}}/cluster_oe/%x.%A.%a.%N.err_out --error=/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn/experiments/{{EXPERIMENT_NAME}}/cluster_oe/%x.%A.%a.%N.err_out --export=EXPERIMENT_NAME={{EXPERIMENT_NAME}},BATCH_SIZE={{BATCH_SIZE}},EPOCHS={{EPOCHS}},WARMUP_EPOCHS={{WARMUP_EPOCHS}},INVERT_GRADIENTS={{INVERT_GRADIENTS}},USE_RPN_OPTIMIZER={{USE_RPN_OPTIMIZER}},SEPARATE_LOCAL_NET={{SEPARATE_LOCAL_NET}},STN_MODE={{STN_MODE}} cluster/run_rpn_unbounded.sh
+
 # DINO RPN (NORMAL gtx3080)
 @dino_rpn_3080 EXPERIMENT_NAME BATCH_SIZE EPOCHS WARMUP_EPOCHS INVERT_GRADIENTS USE_RPN_OPTIMIZER SEPARATE_LOCAL_NET STN_MODE:
    #!/usr/bin/env zsh

@@ -3,7 +3,7 @@
 #SBATCH --gres=gpu:8
 #SBATCH -J dino_rpn_pretrained_rpn
 #SBATCH -t 23:59:59
-#SBATCH --array 0-10%1
+#SBATCH --array 0-25%1
 
 source /home/ferreira/.profile
 source activate dinorpn
