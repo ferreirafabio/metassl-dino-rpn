@@ -37,6 +37,7 @@ N_PARAMS = {
         'rotation_translation': 3,
         'rotation_translation_scale': 5,
         'rotation_scale_symmetric': 2,
+        'rotation_translation_scale_symmetric_limited': 4,
     }
 
 
@@ -252,7 +253,13 @@ class STN(nn.Module):
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 1], dtype=torch.float))
-            
+        elif self.stn_mode == 'rotation_translation_scale_symmetric_limited':
+            # a transformation that is symmetric in scale, i.e. s_x = s_y as well as limited (translation and scale in [-0.5, +0.5])
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
+        
     def _get_stn_mode_theta(self, theta, x):
         # print(theta.shape) # torch.Size([1, 6])
         if self.stn_mode == 'affine':
@@ -316,6 +323,14 @@ class STN(nn.Module):
                 theta_new[:, 0, 1] = -torch.sin(angle)
                 theta_new[:, 1, 0] = torch.sin(angle)
                 theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1]))
+            elif self.stn_mode == 'rotation_translation_scale_symmetric_limited':
+                angle = theta[:, 0]  # leave unbounded
+                theta_new[:, 0, 0] = torch.cos(angle) * (theta[:, 3] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 3]), .5))
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 3] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 3]), .5))
+                theta_new[:, 0, 2] = theta[:, 1] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 1]), .5)
+                theta_new[:, 1, 2] = theta[:, 2] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 2]), .5)
         
         return theta_new
     
