@@ -30,6 +30,7 @@ N_PARAMS = {
         'translation': 2,
         'rotation': 1,
         'scale': 2,
+        'scale_symmetric': 1,
         'shear': 2,
         'rotation_scale': 3,
         'translation_scale': 4,
@@ -216,6 +217,11 @@ class STN(nn.Module):
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([1, 1], dtype=torch.float))
+        elif self.stn_mode == 'scale_symmetric':
+            self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([1], dtype=torch.float))
+            self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([1], dtype=torch.float))
+            self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([1], dtype=torch.float))
+            self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([1], dtype=torch.float))
         elif self.stn_mode == 'rotation':
             self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0], dtype=torch.float))
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0], dtype=torch.float))
@@ -270,6 +276,9 @@ class STN(nn.Module):
             elif self.stn_mode == 'scale':
                 theta_new[:, 0, 0] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
                 theta_new[:, 1, 1] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
+            elif self.stn_mode == 'scale_symmetric':
+                theta_new[:, 0, 0] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
+                theta_new[:, 1, 1] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
             elif self.stn_mode == 'shear':
                 theta_new[:, 0, 1] = theta[:, 0] if self.use_unbounded_stn else torch.tanh(theta[:, 0])
                 theta_new[:, 1, 0] = theta[:, 1] if self.use_unbounded_stn else torch.tanh(theta[:, 1])
