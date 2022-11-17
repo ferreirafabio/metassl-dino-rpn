@@ -38,6 +38,7 @@ N_PARAMS = {
         'rotation_translation_scale': 5,
         'rotation_scale_symmetric': 2,
         'rotation_translation_scale_symmetric_limited': 4,
+        'rotation_translation_scale_symmetric_limited_0_1': 4,
     }
 
 
