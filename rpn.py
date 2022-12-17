@@ -131,6 +131,8 @@ class STN(nn.Module):
     def __init__(self, stn_mode='affine',
                  separate_localization_net=False,
                  invert_rpn_gradients=True,
+                 resize_all_inputs=False,
+                 dataset="ImageNet",
                  deep_loc_net=False,
                  use_one_res=False,
                  use_unbounded_stn=False,
@@ -142,6 +144,8 @@ class STN(nn.Module):
         self.stn_n_params = N_PARAMS[stn_mode]
         self.separate_localization_net = separate_localization_net
         self.invert_rpn_gradients = invert_rpn_gradients
+        self.resize_all_inputs = resize_all_inputs
+        self.dataset = dataset
         self.deep_loc_net = deep_loc_net
         self.use_one_res = use_one_res
         self.use_unbounded_stn = use_unbounded_stn
@@ -209,7 +213,6 @@ class STN(nn.Module):
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
-            
         elif self.stn_mode in ['translation', 'shear']:
             self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
@@ -430,37 +433,50 @@ class AugmentationNetwork(nn.Module):
         super().__init__()
         print("Initializing Augmentation Network")
         self.transform_net = transform_net
+        
 
     def forward(self, imgs):
         global_views1_list, global_views2_list, local_views1_list, local_views2_list = [], [], [], []
         
-        # since we have list of images with varying resolution, we need to transform them individually
-        for img in imgs:
-            img = torch.unsqueeze(img, 0)
-            try:
-                if img.size(2) > 700 or img.size(3) > 700:
-                        img = resize(img, size=700, max_size=701)
-            except Exception as e:
-                print(e)
+        if not self.transform_net.resize_all_inputs and self.transform_net.dataset == "ImageNet":
+            # since we have list of images with varying resolution, we need to transform them individually
+            for img in imgs:
+                img = torch.unsqueeze(img, 0)
+                try:
+                    if img.size(2) > 700 or img.size(3) > 700:
+                            img = resize(img, size=700, max_size=701)
+                except Exception as e:
+                    print(e)
+                    
+                global_local_views = self.transform_net(img)
                 
-            global_local_views = self.transform_net(img)
-            
-            g1_augmented = torch.squeeze(global_local_views[0], 0)
-            g2_augmented = torch.squeeze(global_local_views[1], 0)
-            l1_augmented = torch.squeeze(global_local_views[2], 0)
-            l2_augmented = torch.squeeze(global_local_views[3], 0)
-
-            global_views1_list.append(g1_augmented)
-            global_views2_list.append(g2_augmented)
-            local_views1_list.append(l1_augmented)
-            local_views2_list.append(l2_augmented)
-            
-        global_views1 = torch.stack(global_views1_list, 0)
-        global_views2 = torch.stack(global_views2_list, 0)
-        local_views1 = torch.stack(local_views1_list, 0)
-        local_views2 = torch.stack(local_views2_list, 0)
+                g1_augmented = torch.squeeze(global_local_views[0], 0)
+                g2_augmented = torch.squeeze(global_local_views[1], 0)
+                l1_augmented = torch.squeeze(global_local_views[2], 0)
+                l2_augmented = torch.squeeze(global_local_views[3], 0)
     
-        del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+                global_views1_list.append(g1_augmented)
+                global_views2_list.append(g2_augmented)
+                local_views1_list.append(l1_augmented)
+                local_views2_list.append(l2_augmented)
 
-        return [global_views1, global_views2, local_views1, local_views2]
+            global_views1 = torch.stack(global_views1_list, 0)
+            global_views2 = torch.stack(global_views2_list, 0)
+            local_views1 = torch.stack(local_views1_list, 0)
+            local_views2 = torch.stack(local_views2_list, 0)
+
+            del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+
+            return [global_views1, global_views2, local_views1, local_views2]
+        
+        elif self.transform_net.resize_all_inputs and self.transform_net.dataset == "ImageNet":
+            imgs = torch.stack(imgs, dim=0) # torch.Size([16, 3, 64, 64])
+            return self.transform_net(imgs)
+            
+        else:
+            # CIFAR10/100 probably
+            raise NotImplementedError
+            
+
+        
     

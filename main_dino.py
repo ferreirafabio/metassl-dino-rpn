@@ -157,6 +157,7 @@ def get_args_parser():
     parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
     parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
     parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
+    parser.add_argument("--resize_all_inputs", default=False, type=utils.bool_flag, help="Specifies whether all inputs should be resized to have the same resolution. When set to true, the RPN will be trained batch-wise. Only has an effect when training on ImageNet.")
     
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -197,13 +198,24 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
     # ============ preparing data ... ============
-    transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        ])
+    if not args.resize_all_inputs and args.dataset == "ImageNet":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        collate_fn = custom_collate
+    elif args.resize_all_inputs and args.dataset == "ImageNet":
+        transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        collate_fn = None
+    else:
+        raise NotImplementedError
     
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
-
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     
     data_loader = torch.utils.data.DataLoader(
@@ -213,7 +225,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
-        collate_fn=custom_collate,
+        collate_fn=collate_fn,
         )
 
     print(f"Data loaded: there are {len(dataset)} images.")
@@ -246,6 +258,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     transform_net = STN(stn_mode=args.stn_mode,
                         separate_localization_net=args.separate_localization_net,
                         invert_rpn_gradients=args.invert_rpn_gradients,
+                        resize_all_inputs=args.resize_all_inputs,
+                        dataset=args.dataset,
                         deep_loc_net=args.deep_loc_net,
                         use_one_res=args.use_one_res,
                         use_unbounded_stn=args.use_unbounded_stn,
@@ -474,7 +488,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
-            
+            # print(images[0].size())
+            # print(images[1].size())
+            # print(images[2].size())
+            # print(images[3].size())
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_g1", theta=rpn.module.transform_net.affine_matrix_g1, epoch=epoch, global_step=it)
@@ -662,6 +679,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # todo add support for other datasets
+    if "imagenet" in args.data_path:
+        args.dataset = "ImageNet"
+    else:
+        args.dataset = "CIFAR10"
     
     # os.environ["NCCL_DEBUG"] = "INFO"
     # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
