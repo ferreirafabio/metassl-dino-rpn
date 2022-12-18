@@ -403,6 +403,9 @@ class STN(nn.Module):
         self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
         
         # print(f"theta g1: {theta_g1}")
+        # print(f"theta g1[shape]: {theta_g1.shape}")
+        # print(f"theta g1[0]]: {theta_g1[0]}")
+        # print(f"theta g1[1]: {theta_g1[1]}")
         # print(f"theta g2: {theta_g2}")
         # print(f"theta l1: {theta_l1}")
         # print(f"theta l2: {theta_l2}")
@@ -470,7 +473,7 @@ class AugmentationNetwork(nn.Module):
             return [global_views1, global_views2, local_views1, local_views2]
         
         elif self.transform_net.resize_all_inputs and self.transform_net.dataset == "ImageNet":
-            imgs = torch.stack(imgs, dim=0) # torch.Size([16, 3, 64, 64])
+            imgs = torch.stack(imgs, dim=0)  # torch.Size([16, 3, 64, 64])
             return self.transform_net(imgs)
             
         else:
