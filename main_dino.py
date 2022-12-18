@@ -157,7 +157,8 @@ def get_args_parser():
     parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
     parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
     parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
-    
+    parser.add_argument("--resize_images", default=False, type=utils.bool_flag, help="Set this flag to resize all the images of the dataset, important for datasets with varying resolutions")
+
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
     

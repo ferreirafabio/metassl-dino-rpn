@@ -136,6 +136,7 @@ class STN(nn.Module):
                  use_unbounded_stn=False,
                  conv1_depth=32,
                  conv2_depth=32,
+                 resize_images=False,
                  ):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
@@ -147,12 +148,13 @@ class STN(nn.Module):
         self.use_unbounded_stn = use_unbounded_stn
         self.conv1_depth = conv1_depth
         self.conv2_depth = conv2_depth
-        
+        self.resize_images = resize_images
+
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None
         self.affine_matrix_l1 = None
         self.affine_matrix_l2 = None
-        
+
         # Spatial transformer localization-network
         if self.separate_localization_net:
             self.conv1_depth = 8
@@ -197,19 +199,19 @@ class STN(nn.Module):
                                               invert_rpn_gradients=self.invert_rpn_gradients,
                                               use_unbounded_stn=self.use_unbounded_stn,
                                               )
-        
+
         # Initialize the weights/bias with identity transformation
         self.fc_localization_global1.linear2.weight.data.zero_()
         self.fc_localization_global2.linear2.weight.data.zero_()
         self.fc_localization_local1.linear2.weight.data.zero_()
         self.fc_localization_local2.linear2.weight.data.zero_()
-        
+
         if self.stn_mode == 'affine':
             self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
-            
+
         elif self.stn_mode in ['translation', 'shear']:
             self.fc_localization_global1.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0], dtype=torch.float))
@@ -273,7 +275,7 @@ class STN(nn.Module):
             self.fc_localization_global2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
             self.fc_localization_local1.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
             self.fc_localization_local2.linear2.bias.data.copy_(torch.tensor([0, 0, 0, 1], dtype=torch.float))
-        
+
     def _get_stn_mode_theta(self, theta, x):
         # print(theta.shape) # torch.Size([1, 6])
         if self.stn_mode == 'affine':
@@ -361,55 +363,55 @@ class STN(nn.Module):
                 theta_new[:, 1, 1] = torch.cos(angle) * (theta[:, 3] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 3]), 10))
                 theta_new[:, 0, 2] = theta[:, 1] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 1]), .1)
                 theta_new[:, 1, 2] = theta[:, 2] if self.use_unbounded_stn else torch.mul(torch.tanh(theta[:, 2]), .1)
-        
+
         return theta_new
-    
+
     def forward(self, x):
         if self.separate_localization_net:
             x_loc_features_g1 = self.localization_net_g1(x)
             x_loc_features_g2 = self.localization_net_g2(x)
             x_loc_features_l1 = self.localization_net_l1(x)
             x_loc_features_l2 = self.localization_net_l2(x)
-    
+
             theta_g1 = self.fc_localization_global1(x_loc_features_g1)
             theta_g2 = self.fc_localization_global2(x_loc_features_g2)
             theta_l1 = self.fc_localization_local1(x_loc_features_l1)
             theta_l2 = self.fc_localization_local2(x_loc_features_l2)
-            
+
             theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features_g1)
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features_g2)
             theta_l1 = self._get_stn_mode_theta(theta_l1, x_loc_features_l1)
             theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features_l2)
-            
+
         else:
             x_loc_features = self.localization_net(x)
-    
+
             theta_g1 = self.fc_localization_global1(x_loc_features)
             theta_g2 = self.fc_localization_global2(x_loc_features)
             theta_l1 = self.fc_localization_local1(x_loc_features)
             theta_l2 = self.fc_localization_local2(x_loc_features)
-        
+
             theta_g1 = self._get_stn_mode_theta(theta_g1, x_loc_features)
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features)
             theta_l1 = self._get_stn_mode_theta(theta_l1, x_loc_features)
             theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features)
-        
+
         self.affine_matrix_g1 = theta_g1.cpu().detach().numpy()
         self.affine_matrix_g2 = theta_g2.cpu().detach().numpy()
         self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
         self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
-        
+
         # print(f"theta g1: {theta_g1}")
         # print(f"theta g2: {theta_g2}")
         # print(f"theta l1: {theta_l1}")
         # print(f"theta l2: {theta_l2}")
-        
+
         high_res = 224
         low_res = 96
         one_res = 128
         if self.use_one_res:
             low_res, high_res = one_res, one_res
-        
+
         gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [high_res, high_res])
         g1 = F.grid_sample(x, gridg1)
 
@@ -421,10 +423,10 @@ class STN(nn.Module):
 
         gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [low_res, low_res])
         l2 = F.grid_sample(x, gridl2)
-        
+
         return [g1, g2, l1, l2]
-        
-    
+
+
 class AugmentationNetwork(nn.Module):
     def __init__(self, transform_net):
         super().__init__()
@@ -432,35 +434,38 @@ class AugmentationNetwork(nn.Module):
         self.transform_net = transform_net
 
     def forward(self, imgs):
-        global_views1_list, global_views2_list, local_views1_list, local_views2_list = [], [], [], []
-        
-        # since we have list of images with varying resolution, we need to transform them individually
-        for img in imgs:
-            img = torch.unsqueeze(img, 0)
-            try:
-                if img.size(2) > 700 or img.size(3) > 700:
-                        img = resize(img, size=700, max_size=701)
-            except Exception as e:
-                print(e)
-                
-            global_local_views = self.transform_net(img)
-            
-            g1_augmented = torch.squeeze(global_local_views[0], 0)
-            g2_augmented = torch.squeeze(global_local_views[1], 0)
-            l1_augmented = torch.squeeze(global_local_views[2], 0)
-            l2_augmented = torch.squeeze(global_local_views[3], 0)
+        if self.transform_net.resize_images:
+            # If we have list of images with varying resolution, we need to transform them individually
+            global_views1_list, global_views2_list, local_views1_list, local_views2_list = [], [], [], []
+            for img in imgs:
+                img = torch.unsqueeze(img, 0)
+                try:
+                    if img.size(2) > 700 or img.size(3) > 700:
+                            img = resize(img, size=700, max_size=701)
+                except Exception as e:
+                    print(e)
 
-            global_views1_list.append(g1_augmented)
-            global_views2_list.append(g2_augmented)
-            local_views1_list.append(l1_augmented)
-            local_views2_list.append(l2_augmented)
-            
-        global_views1 = torch.stack(global_views1_list, 0)
-        global_views2 = torch.stack(global_views2_list, 0)
-        local_views1 = torch.stack(local_views1_list, 0)
-        local_views2 = torch.stack(local_views2_list, 0)
-    
-        del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+                global_local_views = self.transform_net(img)
 
-        return [global_views1, global_views2, local_views1, local_views2]
-    
+                g1_augmented = torch.squeeze(global_local_views[0], 0)
+                g2_augmented = torch.squeeze(global_local_views[1], 0)
+                l1_augmented = torch.squeeze(global_local_views[2], 0)
+                l2_augmented = torch.squeeze(global_local_views[3], 0)
+
+                global_views1_list.append(g1_augmented)
+                global_views2_list.append(g2_augmented)
+                local_views1_list.append(l1_augmented)
+                local_views2_list.append(l2_augmented)
+
+            global_views1 = torch.stack(global_views1_list, 0)
+            global_views2 = torch.stack(global_views2_list, 0)
+            local_views1 = torch.stack(local_views1_list, 0)
+            local_views2 = torch.stack(local_views2_list, 0)
+
+            del global_views1_list, global_views2_list, local_views1_list, local_views2_list
+
+            return [global_views1, global_views2, local_views1, local_views2]
+
+        else:
+            imgs = torch.stack(imgs, dim=0)
+            return self.transform_net(imgs)

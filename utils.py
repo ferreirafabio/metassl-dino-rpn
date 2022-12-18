@@ -502,7 +502,8 @@ def init_distributed_mode(args, rank):
     # print("invoking init_process_group")
     # print(args.dist_url, args.world_size, args.rank)
     dist.init_process_group(
-        backend="nccl",
+        # backend="nccl",
+        backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
@@ -819,7 +820,7 @@ def compute_map(ranks, gnd, kappas=[]):
         # compute precision @ k
         pos += 1 # get it to 1-based
         for j in np.arange(len(kappas)):
-            kq = min(max(pos), kappas[j]); 
+            kq = min(max(pos), kappas[j]);
             prs[i, j] = (pos <= kq).sum() / kq
         pr = pr + prs[i, :]
 
@@ -884,14 +885,14 @@ def image_grid(images, original_images, epoch, batch_size=16):
     # plt.subplots_adjust(hspace=None)
     # images = list(images)
     # original_images = list(original_images)
-    
+
     g1 = images[0]
     g2 = images[1]
     l1 = images[2]
     l2 = images[3]
-    
+
     titles = [f"orig@{epoch} epoch", "global 1", "global 2", "local 1", "local 2"]
-    
+    num_images = len(original_images)
     total = 0
     for i, orig_img in enumerate(original_images, 1):
         g1_img = g1[i - 1]
@@ -902,11 +903,11 @@ def image_grid(images, original_images, epoch, batch_size=16):
         for j in range(1, 6):
             total += 1
 
-            plt.subplot(16, 5, total, title=titles[j-1])  # todo: support higher batch sizes
+            plt.subplot(num_images, 5, total, title=titles[j-1])  # todo: support higher batch sizes
             plt.xticks([])
             plt.yticks([])
             plt.grid(False)
-            
+
             img = all_images[j-1].cpu().detach().numpy()
 
             if img.shape[0] == 3:
@@ -915,9 +916,9 @@ def image_grid(images, original_images, epoch, batch_size=16):
             else:
                 # MNIST case
                 img = img.squeeze()
-                
+
             plt.imshow(img)
-    
+
     return figure
 
 
@@ -938,11 +939,11 @@ class SummaryWriterCustom(SummaryWriter):
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
         fig = image_grid(images=images, original_images=original_images, epoch=epoch, batch_size=self.batch_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
-        
+
     def write_theta_heatmap(self, tag, theta, epoch, global_step):
         fig = theta_heatmap(theta, epoch)
         self.writer.add_figure(tag, fig, global_step=global_step)
-    
+
     def write_scalar(self, tag, scalar_value, global_step):
         self.writer.add_scalar(tag=tag, scalar_value=scalar_value, global_step=global_step)
 
