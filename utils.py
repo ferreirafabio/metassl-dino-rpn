@@ -32,6 +32,7 @@ import torch
 from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
+from torchvision import datasets
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 from typing import Any, List, Union, Type
 from torch.utils.tensorboard import SummaryWriter
@@ -949,3 +950,25 @@ class SummaryWriterCustom(SummaryWriter):
 
     def close(self):
         self.writer.close()
+
+
+def load_dataset(name, path, transform):
+    if name == "ImageNet":
+        return datasets.ImageFolder(path, transform=transform)
+    elif name == "CIFAR10":
+        return datasets.CIFAR10(
+            root=path,
+            train=True,
+            download=True,
+            transform=transform
+        )
+    elif name == "CIFAR100":
+        return datasets.CIFAR100(
+            root=path,
+            train=True,
+            download=True,
+            transform=transform
+        )
+
+    print(f"Does not support dataset: {name}")
+    sys.exit(1)

@@ -136,7 +136,7 @@ class STN(nn.Module):
                  use_unbounded_stn=False,
                  conv1_depth=32,
                  conv2_depth=32,
-                 resize_images=False,
+                 resize_input=False,
                  ):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
@@ -148,7 +148,7 @@ class STN(nn.Module):
         self.use_unbounded_stn = use_unbounded_stn
         self.conv1_depth = conv1_depth
         self.conv2_depth = conv2_depth
-        self.resize_images = resize_images
+        self.resize_images = resize_input
 
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None

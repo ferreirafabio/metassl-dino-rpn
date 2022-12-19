@@ -35,7 +35,7 @@ from torchvision import models as torchvision_models
 from eval_linear import eval_linear
 
 import utils
-from utils import custom_collate, SummaryWriterCustom
+from utils import custom_collate, SummaryWriterCustom, load_dataset
 import vision_transformer as vits
 from vision_transformer import DINOHead
 from functools import partial
@@ -157,7 +157,9 @@ def get_args_parser():
     parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
     parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
     parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
-    parser.add_argument("--resize_images", default=False, type=utils.bool_flag, help="Set this flag to resize all the images of the dataset, important for datasets with varying resolutions")
+    parser.add_argument("--resize_input", default=False, type=utils.bool_flag, help="Set this flag to resize the images of the dataset, important for datasets with varying resolutions")
+    parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
+                        help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -203,7 +205,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = load_dataset(args.dataset, args.data_path, transform=transform)
 
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     
@@ -252,6 +254,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                         use_unbounded_stn=args.use_unbounded_stn,
                         conv1_depth=args.rpn_conv1_depth,
                         conv2_depth=args.rpn_conv2_depth,
+                        resize_input=args.resize_input
                         )
     rpn = AugmentationNetwork(transform_net=transform_net)
     
