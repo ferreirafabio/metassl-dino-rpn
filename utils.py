@@ -505,8 +505,8 @@ def init_distributed_mode(args, rank):
     # print("invoking init_process_group")
     # print(args.dist_url, args.world_size, args.rank)
     dist.init_process_group(
-        # backend="nccl",
-        backend="gloo",
+        backend="nccl",
+        # backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
