@@ -44,17 +44,18 @@ from rpn import STN
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(torchvision_models.__dict__[name]))
+                           if name.islower() and not name.startswith("__")
+                           and callable(torchvision_models.__dict__[name]))
+
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DINO', add_help=False)
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
-        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
-                + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
-        help="""Name of architecture to train. For quick experiments with ViTs,
+                        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
+                                + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
+                        help="""Name of architecture to train. For quick experiments with ViTs,
         we recommend using vit_tiny or vit_small.""")
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
         of input square patches - default 16 (for 16x16 patches). Using smaller
@@ -64,24 +65,24 @@ def get_args_parser():
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
-        help="""Whether or not to weight normalize the last layer of the DINO head.
+                        help="""Whether or not to weight normalize the last layer of the DINO head.
         Not normalizing leads to better performance but can make the training unstable.
         In our experiments, we typically set this paramater to False with vit_small and True with vit_base.""")
     parser.add_argument('--momentum_teacher', default=0.996, type=float, help="""Base EMA
         parameter for teacher update. The value is increased to 1 during training with cosine schedule.
         We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
     parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag,
-        help="Whether to use batch normalizations in projection head (Default: False)")
+                        help="Whether to use batch normalizations in projection head (Default: False)")
 
     # Temperature teacher parameters
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float,
-        help="""Initial value for the teacher temperature: 0.04 works well in most cases.
+                        help="""Initial value for the teacher temperature: 0.04 works well in most cases.
         Try decreasing it if the training loss does not decrease.""")
     parser.add_argument('--teacher_temp', default=0.04, type=float, help="""Final value (after linear warmup)
         of the teacher temperature. For most experiments, anything above 0.07 is unstable. We recommend
         starting with the default value of 0.04 and increase this slightly if needed.""")
     parser.add_argument('--warmup_teacher_temp_epochs', default=0, type=int,
-        help='Number of warmup epochs for the teacher temperature (Default: 30).')
+                        help='Number of warmup epochs for the teacher temperature (Default: 30).')
 
     # Training/Optimization parameters
     parser.add_argument('--use_fp16', type=utils.bool_flag, default=True, help="""Whether or not
@@ -97,7 +98,7 @@ def get_args_parser():
         gradient norm if using gradient clipping. Clipping with norm .3 ~ 1.0 can
         help optimization for larger ViT architectures. 0 for disabling.""")
     parser.add_argument('--batch_size_per_gpu', default=64, type=int,
-        help='Per-GPU batch-size : number of distinct images loaded on one GPU.')
+                        help='Per-GPU batch-size : number of distinct images loaded on one GPU.')
     parser.add_argument('--epochs', default=100, type=int, help='Number of epochs of training.')
     parser.add_argument('--freeze_last_layer', default=1, type=int, help="""Number of epochs
         during which we keep the output layer fixed. Typically doing so during
@@ -106,28 +107,29 @@ def get_args_parser():
         linear warmup (highest LR used during training). The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--warmup_epochs", default=10, type=int,
-        help="Number of epochs for the linear learning-rate warm up.")
+                        help="Number of epochs for the linear learning-rate warm up.")
     parser.add_argument('--min_lr', type=float, default=1e-6, help="""Target LR at the
         end of optimization. We use a cosine LR schedule with linear warmup.""")
     parser.add_argument('--optimizer', default='adamw', type=str,
-        choices=['adamw', 'sgd', 'lars'], help="""Type of optimizer. We recommend using adamw with ViTs.""")
+                        choices=['adamw', 'sgd', 'lars'],
+                        help="""Type of optimizer. We recommend using adamw with ViTs.""")
     parser.add_argument('--drop_path_rate', type=float, default=0.1, help="stochastic depth rate")
 
     # Multi-crop parameters
     parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
-        help="""Scale range of the cropped image before resizing, relatively to the origin image.
+                        help="""Scale range of the cropped image before resizing, relatively to the origin image.
         Used for large global view cropping. When disabling multi-crop (--local_crops_number 0), we
         recommand using a wider range of scale ("--global_crops_scale 0.14 1." for example)""")
     parser.add_argument('--local_crops_number', type=int, default=8, help="""Number of small
         local views to generate. Set this parameter to 0 to disable multi-crop training.
         When disabling multi-crop we recommend to use "--global_crops_scale 0.14 1." """)
     parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
-        help="""Scale range of the cropped image before resizing, relatively to the origin image.
+                        help="""Scale range of the cropped image before resizing, relatively to the origin image.
         Used for small local view cropping of multi-crop.""")
 
     # Misc
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
-        help='Please specify path to the ImageNet training data.')
+                        help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
     parser.add_argument('--saveckp_freq', default=3, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
@@ -140,28 +142,50 @@ def get_args_parser():
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
 
     # RPN
-    parser.add_argument("--invert_rpn_gradients", default=False, type=utils.bool_flag, help="Set this flag to invert the gradients used to learn the RPN")
-    parser.add_argument("--use_rpn_optimizer", default=False, type=utils.bool_flag, help="Set this flag to use a separate optimizer for the RPN parameters; "
-                                                                         "annealed with cosine and no warmup")
-    parser.add_argument('--stn_mode', default='affine', type=str, help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
-                                                                       'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
+    parser.add_argument("--invert_rpn_gradients", default=False, type=utils.bool_flag,
+                        help="Set this flag to invert the gradients used to learn the RPN")
+    parser.add_argument("--use_rpn_optimizer", default=False, type=utils.bool_flag,
+                        help="Set this flag to use a separate optimizer for the RPN parameters; "
+                             "annealed with cosine and no warmup")
+    parser.add_argument('--stn_mode', default='affine', type=str,
+                        help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
+                             'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
     parser.add_argument("--rpnlr", default=5e-4, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
-    parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag, help="Set this flag to use a separate localization network for each head.")
-    parser.add_argument("--summary_writer_freq", default=5000, type=int, help="Defines the number of iterations the summary writer will write output.")
-    parser.add_argument("--grad_check_freq", default=5000, type=int, help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
-    parser.add_argument('--rpn_pretrained_weights', default='', type=str, help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
-    parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag, help="Set this flag to use a deep loc net (default: False).")
-    parser.add_argument("--use_one_res", default=False, type=utils.bool_flag, help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
-    parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag, help="Set this flag to not use a tanh in the last STN layer (default: use bounded RPN).")
-    parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
-    parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
-    parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
-    parser.add_argument("--resize_input", default=False, type=utils.bool_flag, help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
+    parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag,
+                        help="Set this flag to use a separate localization network for each head.")
+    parser.add_argument("--summary_writer_freq", default=5000, type=int,
+                        help="Defines the number of iterations the summary writer will write output.")
+    parser.add_argument("--grad_check_freq", default=5000, type=int,
+                        help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
+    parser.add_argument("--summary_plot_size", default=16, type=int,
+                        help="Defines the number of samples to show in the summary writer.")
+    parser.add_argument('--rpn_pretrained_weights', default='', type=str,
+                        help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
+    parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag,
+                        help="Set this flag to use a deep loc net (default: False).")
+    parser.add_argument("--use_one_res", default=False, type=utils.bool_flag,
+                        help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
+    parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag,
+                        help="Set this flag to not use a tanh in the last STN layer (default: use bounded RPN).")
+    parser.add_argument("--rpn_warmup_epochs", default=0, type=int,
+                        help="Specifies the number of warmup epochs for the RPN (default: 0).")
+    parser.add_argument("--rpn_conv1_depth", default=32, type=int,
+                        help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
+    parser.add_argument("--rpn_conv2_depth", default=32, type=int,
+                        help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
+    parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
+                        help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
     parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
                         help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
-    parser.add_argument("--stn_theta_norm", default=True, type=utils.bool_flag, help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
+    parser.add_argument("--stn_theta_norm", default=True, type=utils.bool_flag,
+                        help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
+    parser.add_argument("--similarity_penalty", default=True, type=utils.bool_flag,
+                        help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
+    parser.add_argument("--global_res", default=224, type=int, help="Global output resolution of the STN")
+    parser.add_argument("--local_res", default=96, type=int, help="Local output resolution of the STN")
+    parser.add_argument("--one_res", default=128, type=int, help="Single output resolution of the STN. Use with '--use_one_res'.")
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -192,7 +216,6 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
 
 
 def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
-
     print(f"init distributed mode executed")
     utils.init_distributed_mode(args, rank)
     utils.fix_random_seeds(args.seed)
@@ -219,7 +242,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         pin_memory=True,
         drop_last=True,
         collate_fn=custom_collate,
-        )
+    )
 
     print(f"Data loaded: there are {len(dataset)} images.")
 
@@ -257,7 +280,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                         conv1_depth=args.rpn_conv1_depth,
                         conv2_depth=args.rpn_conv2_depth,
                         resize_input=args.resize_input,
-                        theta_norm=args.stn_theta_norm
+                        theta_norm=args.stn_theta_norm,
+                        global_res=args.global_res,
+                        local_res=args.local_res,
+                        one_res=args.one_res
                         )
     rpn = AugmentationNetwork(transform_net=transform_net)
 
@@ -308,6 +334,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         args.teacher_temp,
         args.warmup_teacher_temp_epochs,
         args.epochs,
+    ).cuda()
+
+    sim_loss = SIMLoss(
+        32
     ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -371,7 +401,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             args.min_lr,
             args.epochs, len(data_loader),
             warmup_epochs=args.rpn_warmup_epochs,
-            )
+        )
 
     # momentum parameter is increased to 1. during training with a cosine schedule
     momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
@@ -413,7 +443,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     summary_writer = None
     if torch.distributed.get_rank() == 0:
-        summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
+        summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.summary_plot_size)
 
     start_time = time.time()
     print("Starting DINO training !")
@@ -423,9 +453,10 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     for epoch in range(start_epoch, end_epoch):
         data_loader.sampler.set_epoch(epoch)
         # ============ training one epoch of DINO ... ============
-        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
-            data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule,
-            epoch, fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer)
+        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss,
+                                      data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule,
+                                      momentum_schedule,
+                                      epoch, fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer)
 
         # ============ writing logs ... ============
         save_dict = {
@@ -452,7 +483,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
 
-def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
+
+def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, data_loader,
                     optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
                     fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -479,33 +511,47 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            images = rpn(images)
+            stn_images = rpn(images)
+            penalty = 0
+            if args.similarity_penalty:
+                penalty = sim_loss(stn_images, images)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
-                summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_g1", theta=rpn.module.transform_net.affine_matrix_g1, epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_g2", theta=rpn.module.transform_net.affine_matrix_g2, epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_l1", theta=rpn.module.transform_net.affine_matrix_l1, epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_l2", theta=rpn.module.transform_net.affine_matrix_l2, epoch=epoch, global_step=it)
+                summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
+                                                epoch=epoch, global_step=it)
+                summary_writer.write_theta_heatmap(tag="theta_g1", theta=rpn.module.transform_net.affine_matrix_g1,
+                                                   epoch=epoch, global_step=it)
+                summary_writer.write_theta_heatmap(tag="theta_g2", theta=rpn.module.transform_net.affine_matrix_g2,
+                                                   epoch=epoch, global_step=it)
+                summary_writer.write_theta_heatmap(tag="theta_l1", theta=rpn.module.transform_net.affine_matrix_l1,
+                                                   epoch=epoch, global_step=it)
+                summary_writer.write_theta_heatmap(tag="theta_l2", theta=rpn.module.transform_net.affine_matrix_l2,
+                                                   epoch=epoch, global_step=it)
 
-                theta_g_euc_norm = np.linalg.norm(np.double(rpn.module.transform_net.affine_matrix_g2[0] - rpn.module.transform_net.affine_matrix_g1[0]), 2)
-                theta_l_euc_norm = np.linalg.norm(np.double(rpn.module.transform_net.affine_matrix_l2[0] - rpn.module.transform_net.affine_matrix_l1[0]), 2)
-                summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm, global_step=it)
-                summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm, global_step=it)
+                theta_g_euc_norm = np.linalg.norm(np.double(
+                    rpn.module.transform_net.affine_matrix_g2[0] - rpn.module.transform_net.affine_matrix_g1[0]), 2)
+                theta_l_euc_norm = np.linalg.norm(np.double(
+                    rpn.module.transform_net.affine_matrix_l2[0] - rpn.module.transform_net.affine_matrix_l1[0]), 2)
+                summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm,
+                                            global_step=it)
+                summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm,
+                                            global_step=it)
 
                 uncropped_images = None
 
             # continue
-            teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
-            student_output = student(images)
-            loss = dino_loss(student_output, teacher_output, epoch)
+            teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
+            student_output = student(stn_images)
+            loss = dino_loss(student_output, teacher_output, epoch) + penalty
 
             if torch.distributed.get_rank() == 0:
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
                 summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
                 if args.use_rpn_optimizer and not use_pretrained_rpn:
-                    summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"], global_step=it)
-                summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"], global_step=it)
+                    summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"],
+                                                global_step=it)
+                summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"],
+                                            global_step=it)
 
             metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
@@ -661,6 +707,21 @@ class DINOLoss(nn.Module):
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
+
+
+class SIMLoss(nn.Module):
+    def __init__(self, resolution: int, min_sim: float = 0.):
+        super().__init__()
+        self.loss_fn = SSIM()
+        self.resize = transforms.Resize(resolution)
+        self.min_sim = min_sim
+
+    def forward(self, output, target):
+        target = self.resize(torch.stack(target))
+        loss = 0
+        for itm in output:
+            loss += self.loss_fn(self.resize(itm), target)
+        return 4 - loss
 
 
 if __name__ == '__main__':

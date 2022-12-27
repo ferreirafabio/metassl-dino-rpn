@@ -17,6 +17,7 @@ Misc functions.
 Mostly copy-paste from torchvision references or other public repos like DETR:
 https://github.com/facebookresearch/detr/blob/master/util/misc.py
 """
+import argparse
 import os
 import sys
 import time
@@ -505,8 +506,7 @@ def init_distributed_mode(args, rank):
     # print("invoking init_process_group")
     # print(args.dist_url, args.world_size, args.rank)
     dist.init_process_group(
-        # backend="nccl",
-        backend="gloo",
+        backend="nccl",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
@@ -878,12 +878,12 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
 
 
-def image_grid(images, original_images, epoch, batch_size=16):
+def image_grid(images, original_images, epoch, plot_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(20, 50))
     figure.tight_layout()
-    num_images = 32
+    num_images = min(len(original_images), plot_size)
     plt.subplots_adjust(hspace=0.5)
 
     g1 = images[0]
@@ -903,7 +903,7 @@ def image_grid(images, original_images, epoch, batch_size=16):
         for j in range(5):
             total += 1
 
-            plt.subplot(num_images, 5, total, title=titles[j])  # todo: support higher batch sizes
+            plt.subplot(num_images, 5, total, title=titles[j])
             plt.xticks([])
             plt.yticks([])
             plt.grid(False)

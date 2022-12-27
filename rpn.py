@@ -140,7 +140,7 @@ class STN(nn.Module):
                  theta_norm=True,
                  global_res=224,
                  local_res=96,
-                 one_res=112
+                 one_res=128
                  ):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
