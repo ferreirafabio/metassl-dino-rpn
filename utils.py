@@ -36,7 +36,9 @@ from torchvision import datasets
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 from typing import Any, List, Union, Type
 from torch.utils.tensorboard import SummaryWriter
+import matplotlib
 import matplotlib.pyplot as plt
+matplotlib.use('Agg')
 
 
 class GaussianBlur(nn.Module):
@@ -881,11 +883,8 @@ def image_grid(images, original_images, epoch, batch_size=16):
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(20, 50))
     figure.tight_layout()
-
+    num_images = 32
     plt.subplots_adjust(hspace=0.5)
-    # plt.subplots_adjust(hspace=None)
-    # images = list(images)
-    # original_images = list(original_images)
 
     g1 = images[0]
     g2 = images[1]
@@ -893,23 +892,23 @@ def image_grid(images, original_images, epoch, batch_size=16):
     l2 = images[3]
 
     titles = [f"orig@{epoch} epoch", "global 1", "global 2", "local 1", "local 2"]
-    num_images = len(original_images)
     total = 0
-    for i, orig_img in enumerate(original_images, 1):
-        g1_img = g1[i - 1]
-        g2_img = g2[i - 1]
-        l1_img = l1[i - 1]
-        l2_img = l2[i - 1]
+    for i in range(num_images):  # orig_img in enumerate(original_images, 1):
+        orig_img = original_images[i]
+        g1_img = g1[i]
+        g2_img = g2[i]
+        l1_img = l1[i]
+        l2_img = l2[i]
         all_images = [orig_img, g1_img, g2_img, l1_img, l2_img]
-        for j in range(1, 6):
+        for j in range(5):
             total += 1
 
-            plt.subplot(num_images, 5, total, title=titles[j-1])  # todo: support higher batch sizes
+            plt.subplot(num_images, 5, total, title=titles[j])  # todo: support higher batch sizes
             plt.xticks([])
             plt.yticks([])
             plt.grid(False)
 
-            img = all_images[j-1].cpu().detach().numpy()
+            img = all_images[j].cpu().detach().numpy()
 
             if img.shape[0] == 3:
                 # CIFAR100 and ImageNet case
@@ -918,7 +917,7 @@ def image_grid(images, original_images, epoch, batch_size=16):
                 # MNIST case
                 img = img.squeeze()
 
-            plt.imshow(img)
+            plt.imshow(np.clip(img, 0, 1))
 
     return figure
 

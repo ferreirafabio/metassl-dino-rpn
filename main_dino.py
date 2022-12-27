@@ -1,11 +1,11 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -41,6 +41,7 @@ from vision_transformer import DINOHead
 from functools import partial
 from rpn import AugmentationNetwork
 from rpn import STN
+from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -137,7 +138,7 @@ def get_args_parser():
     parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
-    
+
     # RPN
     parser.add_argument("--invert_rpn_gradients", default=False, type=utils.bool_flag, help="Set this flag to invert the gradients used to learn the RPN")
     parser.add_argument("--use_rpn_optimizer", default=False, type=utils.bool_flag, help="Set this flag to use a separate optimizer for the RPN parameters; "
@@ -157,13 +158,14 @@ def get_args_parser():
     parser.add_argument("--rpn_warmup_epochs", default=0, type=int, help="Specifies the number of warmup epochs for the RPN (default: 0).")
     parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
     parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
-    parser.add_argument("--resize_input", default=False, type=utils.bool_flag, help="Set this flag to resize the images of the dataset, important for datasets with varying resolutions")
+    parser.add_argument("--resize_input", default=False, type=utils.bool_flag, help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
     parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
                         help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
+    parser.add_argument("--stn_theta_norm", default=True, type=utils.bool_flag, help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
-    
+
     return parser
 
 
@@ -184,31 +186,31 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = '29500'
     # os.environ["MASTER_PORT"] = str(find_free_port())
-    
+
     os.environ["WORLD_SIZE"] = str(args.world_size)
     train_dino(None, args.output_dir, args.output_dir, args)
-        
+
 
 def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
-    
+
     print(f"init distributed mode executed")
     utils.init_distributed_mode(args, rank)
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
-    
+
     cudnn.benchmark = True
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
     # ============ preparing data ... ============
     transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        ])
-    
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ])
+
     dataset = load_dataset(args.dataset, args.data_path, transform=transform)
 
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
-    
+
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=sampler,
@@ -245,7 +247,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         embed_dim = student.fc.weight.shape[1]
     else:
         print(f"Unknown architecture: {args.arch}")
-        
+
     transform_net = STN(stn_mode=args.stn_mode,
                         separate_localization_net=args.separate_localization_net,
                         invert_rpn_gradients=args.invert_rpn_gradients,
@@ -254,10 +256,11 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                         use_unbounded_stn=args.use_unbounded_stn,
                         conv1_depth=args.rpn_conv1_depth,
                         conv2_depth=args.rpn_conv2_depth,
-                        resize_input=args.resize_input
+                        resize_input=args.resize_input,
+                        theta_norm=args.stn_theta_norm
                         )
     rpn = AugmentationNetwork(transform_net=transform_net)
-    
+
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
         embed_dim,
@@ -271,7 +274,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     )
     # move networks to gpu
     student, teacher, rpn = student.cuda(), teacher.cuda(), rpn.cuda()
-    
+
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
         student = nn.SyncBatchNorm.convert_sync_batchnorm(student)
@@ -280,14 +283,14 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         # we need DDP wrapper to have synchro batch norms working...
         teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu])
         teacher_without_ddp = teacher.module
-        
+
     else:
         # teacher_without_ddp and teacher are the same thing
         teacher_without_ddp = teacher
-        
+
     if utils.has_batchnorms(rpn):
         rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
-        
+
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
     rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu])
     # teacher and student start with the same weights
@@ -318,18 +321,18 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
         for p in rpn.parameters():
             p.requires_grad = False
-    
+
     if not args.use_rpn_optimizer and not use_pretrained_rpn:
         # add to regularized param group
         # student_params = params_groups[0]['params']
         # all_params = student_params + list(rpn.parameters())
         # params_groups[0]['params'] = all_params
-        
+
         # do not use wd scheduling of RPN params
         student_params = params_groups[1]['params']
         all_params = student_params + list(rpn.parameters())
         params_groups[1]['params'] = all_params
-    
+
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
         if args.use_rpn_optimizer and not use_pretrained_rpn:
@@ -342,7 +345,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
         if args.use_rpn_optimizer and not use_pretrained_rpn:
             rpn_optimizer = torch.optim.LARS(list(rpn.parameters()))  # lr is set by scheduler
-        
+
     # for mixed precision training
     fp16_scaler = None
     if args.use_fp16:
@@ -360,7 +363,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         args.weight_decay_end,
         args.epochs, len(data_loader),
     )
-    
+
     rpn_lr_schedule = None
     if rpn_optimizer and not use_pretrained_rpn:
         rpn_lr_schedule = utils.cosine_scheduler(
@@ -369,7 +372,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             args.epochs, len(data_loader),
             warmup_epochs=args.rpn_warmup_epochs,
             )
-    
+
     # momentum parameter is increased to 1. during training with a cosine schedule
     momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
                                                args.epochs, len(data_loader))
@@ -379,7 +382,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     to_restore = {"epoch": 0}
     if previous_working_directory is not None:
         utils.restart_from_checkpoint(
-            os.path.join(previous_working_directory, "checkpoint.pth"), 
+            os.path.join(previous_working_directory, "checkpoint.pth"),
             run_variables=to_restore,
             student=student,
             teacher=teacher,
@@ -401,22 +404,22 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             rpn=rpn,
             rpn_optimizer=rpn_optimizer,
         )
-        
+
     start_epoch = to_restore["epoch"]
 
     if use_pretrained_rpn:
         for p in rpn.parameters():
             p.requires_grad = False
-    
+
     summary_writer = None
     if torch.distributed.get_rank() == 0:
         summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.batch_size_per_gpu)
 
     start_time = time.time()
     print("Starting DINO training !")
-    
+
     end_epoch = args.epochs
-    
+
     for epoch in range(start_epoch, end_epoch):
         data_loader.sampler.set_epoch(epoch)
         # ============ training one epoch of DINO ... ============
@@ -449,13 +452,12 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
 
-
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
                     fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
-    
+
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
@@ -463,61 +465,60 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             param_group["lr"] = lr_schedule[it]
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
-                
+
         if args.use_rpn_optimizer and not use_pretrained_rpn:
             for i, param_group in enumerate(rpn_optimizer.param_groups):
                 param_group["lr"] = rpn_lr_schedule[it]
-        
+
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
         # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
-        
+
         if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
             uncropped_images = copy.deepcopy(images)
-            
+
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             images = rpn(images)
-            
+
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_g1", theta=rpn.module.transform_net.affine_matrix_g1, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_g2", theta=rpn.module.transform_net.affine_matrix_g2, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_l1", theta=rpn.module.transform_net.affine_matrix_l1, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_l2", theta=rpn.module.transform_net.affine_matrix_l2, epoch=epoch, global_step=it)
-            
+
                 theta_g_euc_norm = np.linalg.norm(np.double(rpn.module.transform_net.affine_matrix_g2[0] - rpn.module.transform_net.affine_matrix_g1[0]), 2)
                 theta_l_euc_norm = np.linalg.norm(np.double(rpn.module.transform_net.affine_matrix_l2[0] - rpn.module.transform_net.affine_matrix_l1[0]), 2)
                 summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm, global_step=it)
                 summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm, global_step=it)
-    
+
                 uncropped_images = None
-            
+
             # continue
             teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
             student_output = student(images)
             loss = dino_loss(student_output, teacher_output, epoch)
-            
+
             if torch.distributed.get_rank() == 0:
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
                 summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
                 if args.use_rpn_optimizer and not use_pretrained_rpn:
                     summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"], global_step=it)
                 summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"], global_step=it)
-            
+
             metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
-    
+
         if args.use_rpn_optimizer and not use_pretrained_rpn:
             rpn_optimizer.zero_grad()
-    
+
         # student update
         optimizer.zero_grad()
         param_norms = None
-        
         if fp16_scaler is None:
 
             loss.backward()
@@ -525,9 +526,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
-            
+
             optimizer.step()
-            
+
             if args.use_rpn_optimizer and not use_pretrained_rpn:
                 rpn_optimizer.step()
 
@@ -537,12 +538,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
                 else:
                     print(rpn.module.transform_net.localization_net.conv2d_2.weight)
-                    
+
                 print("-------------------------sanity check local grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
                 print("-------------------------sanity check global grads-------------------------------")
                 print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
-                
+
                 if args.separate_localization_net:
                     print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
                 else:
@@ -557,14 +558,14 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
-                
+
             fp16_scaler.step(optimizer)
-            
+
             if args.use_rpn_optimizer and not use_pretrained_rpn:
                 fp16_scaler.step(rpn_optimizer)
-                
+
             fp16_scaler.update()
-            
+
             if it % args.grad_check_freq == 0:
                 print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
                 if args.separate_localization_net:
@@ -587,11 +588,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             m = momentum_schedule[it]  # momentum parameter
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-                
+
         # TODO: do we need EMA update for the global heads? grads flow to global heads for now since we don't stop gradient there but may be worth trying to mimic DINO
-        
+
         del images
-        
+
         # logging
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
@@ -599,12 +600,12 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if args.use_rpn_optimizer and not use_pretrained_rpn:
             metric_logger.update(lrrpn=rpn_optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
-    
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    
+
 
 class DINOLoss(nn.Module):
     def __init__(self, out_dim, ncrops, warmup_teacher_temp, teacher_temp,
@@ -666,8 +667,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    
+
     # os.environ["NCCL_DEBUG"] = "INFO"
     # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    
+
     dino_neps_main(args.output_dir, previous_working_directory=None, args=args)

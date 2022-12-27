@@ -137,6 +137,10 @@ class STN(nn.Module):
                  conv1_depth=32,
                  conv2_depth=32,
                  resize_input=False,
+                 theta_norm=True,
+                 global_res=224,
+                 local_res=96,
+                 one_res=112
                  ):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
@@ -148,7 +152,12 @@ class STN(nn.Module):
         self.use_unbounded_stn = use_unbounded_stn
         self.conv1_depth = conv1_depth
         self.conv2_depth = conv2_depth
-        self.resize_images = resize_input
+        self.resize_input = resize_input
+        self.theta_norm = theta_norm
+        if self.use_one_res:
+            self.low_res, self.high_res = one_res, one_res
+        else:
+            self.low_res, self.high_res = local_res, global_res
 
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None
@@ -401,27 +410,22 @@ class STN(nn.Module):
         self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
         self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
 
-        # print(f"theta g1: {theta_g1}")
-        # print(f"theta g2: {theta_g2}")
-        # print(f"theta l1: {theta_l1}")
-        # print(f"theta l2: {theta_l2}")
+        if self.theta_norm:
+            theta_g1 = theta_g1 / torch.linalg.norm(theta_g1, ord=1, dim=2, keepdim=True)
+            theta_g2 = theta_g2 / torch.linalg.norm(theta_g2, ord=1, dim=2, keepdim=True)
+            theta_l1 = theta_l1 / torch.linalg.norm(theta_l1, ord=1, dim=2, keepdim=True)
+            theta_l2 = theta_l2 / torch.linalg.norm(theta_l2, ord=1, dim=2, keepdim=True)
 
-        high_res = 224
-        low_res = 96
-        one_res = 128
-        if self.use_one_res:
-            low_res, high_res = one_res, one_res
-
-        gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [high_res, high_res])
+        gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [self.high_res, self.high_res])
         g1 = F.grid_sample(x, gridg1)
 
-        gridg2 = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [high_res, high_res])
+        gridg2 = F.affine_grid(theta_g2, size=list(x.size()[:2]) + [self.high_res, self.high_res])
         g2 = F.grid_sample(x, gridg2)
 
-        gridl1 = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [low_res, low_res])
+        gridl1 = F.affine_grid(theta_l1, size=list(x.size()[:2]) + [self.low_res, self.low_res])
         l1 = F.grid_sample(x, gridl1)
 
-        gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [low_res, low_res])
+        gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [self.low_res, self.low_res])
         l2 = F.grid_sample(x, gridl2)
 
         return [g1, g2, l1, l2]
@@ -434,7 +438,7 @@ class AugmentationNetwork(nn.Module):
         self.transform_net = transform_net
 
     def forward(self, imgs):
-        if self.transform_net.resize_images:
+        if self.transform_net.resize_input:
             # If we have list of images with varying resolution, we need to transform them individually
             global_views1_list, global_views2_list, local_views1_list, local_views2_list = [], [], [], []
             for img in imgs:
