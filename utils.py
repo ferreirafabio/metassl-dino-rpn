@@ -937,7 +937,7 @@ class SummaryWriterCustom(SummaryWriter):
         self.writer = SummaryWriter(out_path)
 
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
-        fig = image_grid(images=images, original_images=original_images, epoch=epoch, batch_size=self.batch_size)
+        fig = image_grid(images=images, original_images=original_images, epoch=epoch)
         self.writer.add_figure(tag, fig, global_step=global_step)
 
     def write_theta_heatmap(self, tag, theta, epoch, global_step):
