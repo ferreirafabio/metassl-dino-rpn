@@ -230,10 +230,8 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
-    dataset = load_dataset(args.dataset, args.data_path, transform=transform)
-
+    dataset = datasets.ImageFolder(args.data_path, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
-
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=sampler,
@@ -336,8 +334,14 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         args.epochs,
     ).cuda()
 
+    if args.dataset == "CIFAR10":
+        min_res = min(32, args.local_res)
+    else:
+        min_res = args.local_res
+    if args.use_one_res:
+        min_res = min(min_res, args.one_res)
     sim_loss = SIMLoss(
-        32
+        min_res
     ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -443,7 +447,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     summary_writer = None
     if torch.distributed.get_rank() == 0:
-        summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", batch_size=args.summary_plot_size)
+        summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", plot_size=args.summary_plot_size)
 
     start_time = time.time()
     print("Starting DINO training !")
@@ -728,8 +732,4 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-
-    # os.environ["NCCL_DEBUG"] = "INFO"
-    # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-
     dino_neps_main(args.output_dir, previous_working_directory=None, args=args)

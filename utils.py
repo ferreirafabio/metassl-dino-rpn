@@ -931,13 +931,13 @@ def theta_heatmap(theta, epoch):
 
 
 class SummaryWriterCustom(SummaryWriter):
-    def __init__(self, out_path, batch_size):
+    def __init__(self, out_path, plot_size):
         # super().__init__()
-        self.batch_size = batch_size
+        self.plot_size = plot_size
         self.writer = SummaryWriter(out_path)
 
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
-        fig = image_grid(images=images, original_images=original_images, epoch=epoch)
+        fig = image_grid(images=images, original_images=original_images, epoch=epoch, plot_size=self.plot_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
 
     def write_theta_heatmap(self, tag, theta, epoch, global_step):
