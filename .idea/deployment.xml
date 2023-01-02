@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
+    <option name="confirmBeforeUploading" value="false" />
     <serverData>
+      <paths name="META_SSH (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="META_metassl_dino_rpn">
         <serverdata>
           <mappings>
-            <mapping deploy="/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/work/dlclarge2/ferreira-dino-rpn/metassl-dino-rpn2" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
     </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>

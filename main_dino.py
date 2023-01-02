@@ -20,10 +20,8 @@ import math
 import json
 import logging
 from pathlib import Path
-import pickle
 import copy
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -38,9 +36,8 @@ import utils
 from utils import custom_collate, SummaryWriterCustom
 import vision_transformer as vits
 from vision_transformer import DINOHead
-from functools import partial
-from rpn import AugmentationNetwork
-from rpn import STN
+from stn import AugmentationNetwork
+from stn import STN
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
