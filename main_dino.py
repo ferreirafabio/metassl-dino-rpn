@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 import os
+import sys
 import datetime
 import time
 import math
@@ -191,33 +192,9 @@ def get_args_parser():
     return parser
 
 
-def find_free_port():
-    import socket
-    from contextlib import closing
-
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(("", 0))
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return s.getsockname()[1]
-
-
-def dino_neps_main(working_directory, previous_working_directory, args, **hyperparameters):
-    args.output_dir = working_directory
-    ngpus_per_node = torch.cuda.device_count()
-    print(f"Number of GPUs per node detected: {ngpus_per_node}")
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = '29500'
-    # os.environ["MASTER_PORT"] = str(find_free_port())
-
-    os.environ["WORLD_SIZE"] = str(args.world_size)
-    train_dino(None, args.output_dir, args.output_dir, args)
-
-
-def train_dino(rank, working_directory, previous_working_directory, args, hyperparameters=None):
-    print(f"init distributed mode executed")
-    utils.init_distributed_mode(args, rank)
+def train_dino(args):
+    utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
-    print("git:\n  {}\n".format(utils.get_sha()))
 
     cudnn.benchmark = True
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
@@ -414,30 +391,17 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
 
     # ============ optionally resume training ... ============
     to_restore = {"epoch": 0}
-    if previous_working_directory is not None:
-        utils.restart_from_checkpoint(
-            os.path.join(previous_working_directory, "checkpoint.pth"),
-            run_variables=to_restore,
-            student=student,
-            teacher=teacher,
-            optimizer=optimizer,
-            fp16_scaler=fp16_scaler,
-            dino_loss=dino_loss,
-            rpn=rpn,
-            rpn_optimizer=rpn_optimizer,
-        )
-    else:
-        utils.restart_from_checkpoint(
-            os.path.join(args.output_dir, "checkpoint.pth"),  # for DINO baseline
-            run_variables=to_restore,
-            student=student,
-            teacher=teacher,
-            optimizer=optimizer,
-            fp16_scaler=fp16_scaler,
-            dino_loss=dino_loss,
-            rpn=rpn,
-            rpn_optimizer=rpn_optimizer,
-        )
+    utils.restart_from_checkpoint(
+        os.path.join(args.output_dir, "checkpoint.pth"),
+        run_variables=to_restore,
+        student=student,
+        teacher=teacher,
+        optimizer=optimizer,
+        fp16_scaler=fp16_scaler,
+        dino_loss=dino_loss,
+        rpn=rpn,
+        rpn_optimizer=rpn_optimizer,
+    )
 
     start_epoch = to_restore["epoch"]
 
@@ -716,4 +680,4 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    dino_neps_main(args.output_dir, previous_working_directory=None, args=args)
+    train_dino(args)
