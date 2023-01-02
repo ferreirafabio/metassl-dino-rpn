@@ -13,32 +13,25 @@
 # limitations under the License.
 import argparse
 import os
-import sys
 import datetime
 import time
 import math
 import json
-import logging
 from pathlib import Path
-import pickle
 import copy
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn as nn
 import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
-import torch.multiprocessing as mp
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
-from eval_linear import eval_linear
 
 import utils
 from utils import custom_collate, SummaryWriterCustom, load_dataset
 import vision_transformer as vits
 from vision_transformer import DINOHead
-from functools import partial
 from rpn import AugmentationNetwork
 from rpn import STN
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
@@ -61,7 +54,7 @@ def get_args_parser():
         of input square patches - default 16 (for 16x16 patches). Using smaller
         values leads to better performance but requires more memory. Applies only
         for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling
-        mixed precision training (--use_fp16 false) to avoid unstabilities.""")
+        mixed precision training (--use_fp16 false) to avoid instabilities.""")
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
@@ -181,11 +174,16 @@ def get_args_parser():
                         help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
     parser.add_argument("--stn_theta_norm", default=True, type=utils.bool_flag,
                         help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
-    parser.add_argument("--similarity_penalty", default=True, type=utils.bool_flag,
+    parser.add_argument("--similarity_penalty", default=False, type=utils.bool_flag,
                         help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
+    parser.add_argument("--invert_sim_pen", default=False, type=utils.bool_flag,
+                        help="Invert the Similarity Penalty Loss.")
+    parser.add_argument("--min_sim_pen", default=1.0, type=float,
+                        help="Set the minimal similarity value of SIMLoss. Sets the loss to 0 if it the similarity higher.")
     parser.add_argument("--global_res", default=224, type=int, help="Global output resolution of the STN")
     parser.add_argument("--local_res", default=96, type=int, help="Local output resolution of the STN")
-    parser.add_argument("--one_res", default=128, type=int, help="Single output resolution of the STN. Use with '--use_one_res'.")
+    parser.add_argument("--one_res", default=128, type=int,
+                        help="Single output resolution of the STN. Use with '--use_one_res'.")
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -341,7 +339,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
     if args.use_one_res:
         min_res = min(min_res, args.one_res)
     sim_loss = SIMLoss(
-        min_res
+        min_res,
+        min_sim=args.min_sim_pen,
+        invert=args.invert_sim_pen
     ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -582,25 +582,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             if args.use_rpn_optimizer and not use_pretrained_rpn:
                 rpn_optimizer.step()
 
-            if it % args.grad_check_freq == 0:
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
-                if args.separate_localization_net:
-                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
-                else:
-                    print(rpn.module.transform_net.localization_net.conv2d_2.weight)
-
-                print("-------------------------sanity check local grads-------------------------------")
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-                print("-------------------------sanity check global grads-------------------------------")
-                print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
-
-                if args.separate_localization_net:
-                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
-                else:
-                    print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
-                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
-
         else:
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
@@ -616,22 +597,22 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
             fp16_scaler.update()
 
-            if it % args.grad_check_freq == 0:
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
-                if args.separate_localization_net:
-                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
-                else:
-                    print(rpn.module.transform_net.localization_net.conv2d_2.weight)
-                print("-------------------------sanity check local grads-------------------------------")
-                print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
-                print("-------------------------sanity check global grads-------------------------------")
-                print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
-                if args.separate_localization_net:
-                    print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
-                else:
-                    print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
-                print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
-                print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
+        if it % args.grad_check_freq == 0:
+            print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+            if args.separate_localization_net:
+                print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
+            else:
+                print(rpn.module.transform_net.localization_net.conv2d_2.weight)
+            print("-------------------------sanity check local grads-------------------------------")
+            print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+            print("-------------------------sanity check global grads-------------------------------")
+            print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
+            if args.separate_localization_net:
+                print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
+            else:
+                print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
+            print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+            print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
         # EMA update for the teacher
         with torch.no_grad():
@@ -714,18 +695,21 @@ class DINOLoss(nn.Module):
 
 
 class SIMLoss(nn.Module):
-    def __init__(self, resolution: int, min_sim: float = 0.):
+    def __init__(self, resolution: int, min_sim: float = 1., invert=False):
         super().__init__()
         self.loss_fn = SSIM()
         self.resize = transforms.Resize(resolution)
         self.min_sim = min_sim
+        self.invert = 1 if invert else -1
 
     def forward(self, output, target):
         target = self.resize(torch.stack(target))
         loss = 0
         for itm in output:
-            loss += self.loss_fn(self.resize(itm), target)
-        return 4 - loss
+            step = self.loss_fn(self.resize(itm), target)
+            step[step > self.min_sim] = 0
+            loss += 1 - step
+        return self.invert * loss
 
 
 if __name__ == '__main__':

@@ -16,12 +16,6 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from torchvision.transforms.functional import crop, resize
-from torchvision import transforms
-import utils
-import kornia
-from torchvision.models import resnet
-
-# from torchsummary import summary
 
 
 # needed for the spatial transformer net
@@ -90,10 +84,7 @@ class LocalizationNet(nn.Module):
             xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn1(self.conv2d_deep1(xs))))
             xs = self.maxpool2d(F.leaky_relu(self.conv2d_deep_bn2(self.conv2d_deep2(xs))))
 
-        if self.invert_rpn_gradients:
-            xs = grad_reverse(self.avgpool(F.leaky_relu(self.conv2d_bn2(self.conv2d_2(xs)))))
-        else:
-            xs = self.avgpool(F.leaky_relu(self.conv2d_bn2(self.conv2d_2(xs))))
+        xs = self.avgpool(F.leaky_relu(self.conv2d_bn2(self.conv2d_2(xs))))
             
         return xs
 
