@@ -56,11 +56,11 @@ def grad_reverse(x, scale=1.0):
 
     
 class LocalizationNet(nn.Module):
-    def __init__(self, conv1_depth=32, conv2_depth=32, deep=False, invert_rpn_gradients=True):
+    def __init__(self, conv1_depth=32, conv2_depth=32, deep=False, invert_stn_gradients=True):
         super().__init__()
         
         self.deep = deep
-        self.invert_rpn_gradients = invert_rpn_gradients
+        self.invert_stn_gradients = invert_stn_gradients
         self.conv2d_1 = nn.Conv2d(3, conv1_depth, kernel_size=3, padding=2)
         self.conv2d_bn1 = nn.BatchNorm2d(conv1_depth)
         self.maxpool2d = nn.MaxPool2d(2, stride=2)
@@ -90,11 +90,11 @@ class LocalizationNet(nn.Module):
 
 
 class LocHead(nn.Module):
-    def __init__(self, stn_mode, conv2_depth, invert_rpn_gradients=True, use_unbounded_stn=False):
+    def __init__(self, stn_mode, conv2_depth, invert_stn_gradients=True, use_unbounded_stn=False):
         super().__init__()
         
         self.stn_n_params = N_PARAMS[stn_mode]
-        self.invert_rpn_gradients = invert_rpn_gradients
+        self.invert_stn_gradients = invert_stn_gradients
         self.use_unbounded_stn = use_unbounded_stn
     
         self.linear0 = nn.Linear(8 * 8 * conv2_depth, 128)
@@ -107,7 +107,7 @@ class LocHead(nn.Module):
         xs = F.leaky_relu(self.linear0(xs))
         xs = F.leaky_relu(self.linear1(xs))
 
-        if self.invert_rpn_gradients:
+        if self.invert_stn_gradients:
             xs = grad_reverse(self.linear2(xs))
         else:
             xs = self.linear2(xs)
@@ -121,7 +121,7 @@ class STN(nn.Module):
     """""
     def __init__(self, stn_mode='affine',
                  separate_localization_net=False,
-                 invert_rpn_gradients=True,
+                 invert_stn_gradients=True,
                  deep_loc_net=False,
                  use_one_res=False,
                  use_unbounded_stn=False,
@@ -137,7 +137,7 @@ class STN(nn.Module):
         self.stn_mode = stn_mode
         self.stn_n_params = N_PARAMS[stn_mode]
         self.separate_localization_net = separate_localization_net
-        self.invert_rpn_gradients = invert_rpn_gradients
+        self.invert_stn_gradients = invert_stn_gradients
         self.deep_loc_net = deep_loc_net
         self.use_one_res = use_one_res
         self.use_unbounded_stn = use_unbounded_stn
@@ -160,43 +160,43 @@ class STN(nn.Module):
             self.conv1_depth = 8
             self.conv2_depth = 16
             print(f"Using separate localization networks. Overriding conv1_depth={self.conv1_depth} and conv2_depth={self.conv2_depth}.")
-            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
-            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
-            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
-            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_rpn_gradients=self.invert_rpn_gradients)
+            self.localization_net_g1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_stn_gradients=self.invert_stn_gradients)
+            self.localization_net_g2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_stn_gradients=self.invert_stn_gradients)
+            self.localization_net_l1 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_stn_gradients=self.invert_stn_gradients)
+            self.localization_net_l2 = LocalizationNet(conv1_depth=conv1_depth, conv2_depth=conv2_depth, deep=False, invert_stn_gradients=self.invert_stn_gradients)
         else:
             if self.deep_loc_net:
                 self.localization_net = LocalizationNet(conv1_depth=self.conv1_depth,
                                                         conv2_depth=self.conv2_depth,
                                                         deep=True,
-                                                        invert_rpn_gradients=self.invert_rpn_gradients,
+                                                        invert_stn_gradients=self.invert_stn_gradients,
                                                         )
             else:
                 self.localization_net = LocalizationNet(conv1_depth=self.conv1_depth,
                                                         conv2_depth=self.conv2_depth,
                                                         deep=False,
-                                                        invert_rpn_gradients=self.invert_rpn_gradients,
+                                                        invert_stn_gradients=self.invert_stn_gradients,
                                                         )
 
         # Regressors for the 3 * 2 affine matrix
         self.fc_localization_global1 = LocHead(stn_mode=stn_mode,
                                                conv2_depth=conv2_depth,
-                                               invert_rpn_gradients=self.invert_rpn_gradients,
+                                               invert_stn_gradients=self.invert_stn_gradients,
                                                use_unbounded_stn=self.use_unbounded_stn,
                                                )
         self.fc_localization_global2 = LocHead(stn_mode=stn_mode,
                                                conv2_depth=conv2_depth,
-                                               invert_rpn_gradients=self.invert_rpn_gradients,
+                                               invert_stn_gradients=self.invert_stn_gradients,
                                                use_unbounded_stn=self.use_unbounded_stn,
                                                )
         self.fc_localization_local1 = LocHead(stn_mode=stn_mode,
                                               conv2_depth=conv2_depth,
-                                              invert_rpn_gradients=self.invert_rpn_gradients,
+                                              invert_stn_gradients=self.invert_stn_gradients,
                                               use_unbounded_stn=self.use_unbounded_stn,
                                               )
         self.fc_localization_local2 = LocHead(stn_mode=stn_mode,
                                               conv2_depth=conv2_depth,
-                                              invert_rpn_gradients=self.invert_rpn_gradients,
+                                              invert_stn_gradients=self.invert_stn_gradients,
                                               use_unbounded_stn=self.use_unbounded_stn,
                                               )
 
@@ -279,7 +279,8 @@ class STN(nn.Module):
     def _get_stn_mode_theta(self, theta, x):
         # print(theta.shape) # torch.Size([1, 6])
         if self.stn_mode == 'affine':
-            theta[:, 1:] = theta[:, 1:] if self.use_unbounded_stn else torch.tanh(theta[:, 1:])  # optionally bound everything except for the angle at [:, 0]
+            theta = theta.clone()
+            theta[:, 1:] = theta[:, 1:] if self.use_unbounded_stn else torch.clone(torch.tanh(theta[:, 1:]))  # optionally bound everything except for the angle at [:, 0]
             theta_new = theta.view(-1, 2, 3)
             # print(theta_new.shape) # torch.Size([1, 2, 3])
         else:

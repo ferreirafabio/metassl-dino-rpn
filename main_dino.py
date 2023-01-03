@@ -33,8 +33,8 @@ import utils
 from utils import custom_collate, SummaryWriterCustom, load_dataset
 import vision_transformer as vits
 from vision_transformer import DINOHead
-from rpn import AugmentationNetwork
-from rpn import STN
+from stn import AugmentationNetwork
+from stn import STN
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
@@ -135,17 +135,17 @@ def get_args_parser():
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
 
-    # RPN
-    parser.add_argument("--invert_rpn_gradients", default=False, type=utils.bool_flag,
-                        help="Set this flag to invert the gradients used to learn the RPN")
-    parser.add_argument("--use_rpn_optimizer", default=False, type=utils.bool_flag,
-                        help="Set this flag to use a separate optimizer for the RPN parameters; "
+    # STN
+    parser.add_argument("--invert_stn_gradients", default=False, type=utils.bool_flag,
+                        help="Set this flag to invert the gradients used to learn the STN")
+    parser.add_argument("--use_stn_optimizer", default=False, type=utils.bool_flag,
+                        help="Set this flag to use a separate optimizer for the STN parameters; "
                              "annealed with cosine and no warmup")
     parser.add_argument('--stn_mode', default='affine', type=str,
                         help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
                              'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
-    parser.add_argument("--rpnlr", default=5e-4, type=float, help="""Learning rate at the end of
-        linear warmup (highest LR used during training) of the RPN optimizer. The learning rate is linearly scaled
+    parser.add_argument("--stnlr", default=5e-4, type=float, help="""Learning rate at the end of
+        linear warmup (highest LR used during training) of the STN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag,
                         help="Set this flag to use a separate localization network for each head.")
@@ -155,25 +155,25 @@ def get_args_parser():
                         help="Defines the number of iterations the current tensor grad of the global 1 localization head is printed to stdout.")
     parser.add_argument("--summary_plot_size", default=16, type=int,
                         help="Defines the number of samples to show in the summary writer.")
-    parser.add_argument('--rpn_pretrained_weights', default='', type=str,
-                        help="Path to pretrained weights of the RPN network. If specified, the RPN is not trained and used to pre-process images solely.")
+    parser.add_argument('--stn_pretrained_weights', default='', type=str,
+                        help="Path to pretrained weights of the STN network. If specified, the STN is not trained and used to pre-process images solely.")
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag,
                         help="Set this flag to use a deep loc net (default: False).")
     parser.add_argument("--use_one_res", default=False, type=utils.bool_flag,
-                        help="Set this flag to only use one target resolution (128x128) after RPN transformation (instead of 224x and 96x)")
+                        help="Set this flag to only use one target resolution (128x128) after STN transformation (instead of 224x and 96x)")
     parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag,
-                        help="Set this flag to not use a tanh in the last STN layer (default: use bounded RPN).")
-    parser.add_argument("--rpn_warmup_epochs", default=0, type=int,
-                        help="Specifies the number of warmup epochs for the RPN (default: 0).")
-    parser.add_argument("--rpn_conv1_depth", default=32, type=int,
-                        help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
-    parser.add_argument("--rpn_conv2_depth", default=32, type=int,
-                        help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
+                        help="Set this flag to not use a tanh in the last STN layer (default: use bounded STN).")
+    parser.add_argument("--stn_warmup_epochs", default=0, type=int,
+                        help="Specifies the number of warmup epochs for the STN (default: 0).")
+    parser.add_argument("--stn_conv1_depth", default=32, type=int,
+                        help="Specifies the number of feature maps of conv1 for the STN localization network (default: 32).")
+    parser.add_argument("--stn_conv2_depth", default=32, type=int,
+                        help="Specifies the number of feature maps of conv2 for the STN localization network (default: 32).")
     parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
                         help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
     parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
                         help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
-    parser.add_argument("--stn_theta_norm", default=True, type=utils.bool_flag,
+    parser.add_argument("--stn_theta_norm", default=False, type=utils.bool_flag,
                         help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
     parser.add_argument("--similarity_penalty", default=False, type=utils.bool_flag,
                         help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
@@ -246,19 +246,19 @@ def train_dino(args):
 
     transform_net = STN(stn_mode=args.stn_mode,
                         separate_localization_net=args.separate_localization_net,
-                        invert_rpn_gradients=args.invert_rpn_gradients,
+                        invert_stn_gradients=args.invert_stn_gradients,
                         deep_loc_net=args.deep_loc_net,
                         use_one_res=args.use_one_res,
                         use_unbounded_stn=args.use_unbounded_stn,
-                        conv1_depth=args.rpn_conv1_depth,
-                        conv2_depth=args.rpn_conv2_depth,
+                        conv1_depth=args.stn_conv1_depth,
+                        conv2_depth=args.stn_conv2_depth,
                         resize_input=args.resize_input,
                         theta_norm=args.stn_theta_norm,
                         global_res=args.global_res,
                         local_res=args.local_res,
                         one_res=args.one_res
                         )
-    rpn = AugmentationNetwork(transform_net=transform_net)
+    stn = AugmentationNetwork(transform_net=transform_net)
 
     # multi-crop wrapper handles forward with inputs of different resolutions
     student = utils.MultiCropWrapper(student, DINOHead(
@@ -272,7 +272,7 @@ def train_dino(args):
         DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
     )
     # move networks to gpu
-    student, teacher, rpn = student.cuda(), teacher.cuda(), rpn.cuda()
+    student, teacher, stn = student.cuda(), teacher.cuda(), stn.cuda()
 
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
@@ -287,11 +287,11 @@ def train_dino(args):
         # teacher_without_ddp and teacher are the same thing
         teacher_without_ddp = teacher
 
-    if utils.has_batchnorms(rpn):
-        rpn = nn.SyncBatchNorm.convert_sync_batchnorm(rpn)
+    if utils.has_batchnorms(stn):
+        stn = nn.SyncBatchNorm.convert_sync_batchnorm(stn)
 
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
-    rpn = nn.parallel.DistributedDataParallel(rpn, device_ids=[args.gpu])
+    stn = nn.parallel.DistributedDataParallel(stn, device_ids=[args.gpu])
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
@@ -324,38 +324,38 @@ def train_dino(args):
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
 
-    # ============ handling RPN optimization ============
-    rpn_optimizer = None
-    use_pretrained_rpn = os.path.isfile(args.rpn_pretrained_weights)
-    if use_pretrained_rpn:
-        utils.load_rpn_pretrained_weights(rpn, args.rpn_pretrained_weights)
+    # ============ handling STN optimization ============
+    stn_optimizer = None
+    use_pretrained_stn = os.path.isfile(args.stn_pretrained_weights)
+    if use_pretrained_stn:
+        utils.load_stn_pretrained_weights(stn, args.stn_pretrained_weights)
 
-        for p in rpn.parameters():
+        for p in stn.parameters():
             p.requires_grad = False
 
-    if not args.use_rpn_optimizer and not use_pretrained_rpn:
+    if not args.use_stn_optimizer and not use_pretrained_stn:
         # add to regularized param group
         # student_params = params_groups[0]['params']
-        # all_params = student_params + list(rpn.parameters())
+        # all_params = student_params + list(stn.parameters())
         # params_groups[0]['params'] = all_params
 
-        # do not use wd scheduling of RPN params
+        # do not use wd scheduling of STN params
         student_params = params_groups[1]['params']
-        all_params = student_params + list(rpn.parameters())
+        all_params = student_params + list(stn.parameters())
         params_groups[1]['params'] = all_params
 
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
-        if args.use_rpn_optimizer and not use_pretrained_rpn:
-            rpn_optimizer = torch.optim.AdamW(list(rpn.parameters()))  # lr is set by scheduler
+        if args.use_stn_optimizer and not use_pretrained_stn:
+            stn_optimizer = torch.optim.AdamW(list(stn.parameters()))  # lr is set by scheduler
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
-        if args.use_rpn_optimizer and not use_pretrained_rpn:
-            rpn_optimizer = torch.optim.SGD(list(rpn.parameters()), lr=0)  # lr is set by scheduler
+        if args.use_stn_optimizer and not use_pretrained_stn:
+            stn_optimizer = torch.optim.SGD(list(stn.parameters()), lr=0)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
-        if args.use_rpn_optimizer and not use_pretrained_rpn:
-            rpn_optimizer = torch.optim.LARS(list(rpn.parameters()))  # lr is set by scheduler
+        if args.use_stn_optimizer and not use_pretrained_stn:
+            stn_optimizer = torch.optim.LARS(list(stn.parameters()))  # lr is set by scheduler
 
     # for mixed precision training
     fp16_scaler = None
@@ -375,13 +375,13 @@ def train_dino(args):
         args.epochs, len(data_loader),
     )
 
-    rpn_lr_schedule = None
-    if rpn_optimizer and not use_pretrained_rpn:
-        rpn_lr_schedule = utils.cosine_scheduler(
-            args.rpnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+    stn_lr_schedule = None
+    if stn_optimizer and not use_pretrained_stn:
+        stn_lr_schedule = utils.cosine_scheduler(
+            args.stnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
-            warmup_epochs=args.rpn_warmup_epochs,
+            warmup_epochs=args.stn_warmup_epochs,
         )
 
     # momentum parameter is increased to 1. during training with a cosine schedule
@@ -399,14 +399,14 @@ def train_dino(args):
         optimizer=optimizer,
         fp16_scaler=fp16_scaler,
         dino_loss=dino_loss,
-        rpn=rpn,
-        rpn_optimizer=rpn_optimizer,
+        stn=stn,
+        stn_optimizer=stn_optimizer,
     )
 
     start_epoch = to_restore["epoch"]
 
-    if use_pretrained_rpn:
-        for p in rpn.parameters():
+    if use_pretrained_stn:
+        for p in stn.parameters():
             p.requires_grad = False
 
     summary_writer = None
@@ -422,9 +422,9 @@ def train_dino(args):
         data_loader.sampler.set_epoch(epoch)
         # ============ training one epoch of DINO ... ============
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss,
-                                      data_loader, optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule,
+                                      data_loader, optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule,
                                       momentum_schedule,
-                                      epoch, fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer)
+                                      epoch, fp16_scaler, stn, use_pretrained_stn, args, summary_writer)
 
         # ============ writing logs ... ============
         save_dict = {
@@ -434,8 +434,8 @@ def train_dino(args):
             'epoch': epoch + 1,
             'args': args,
             'dino_loss': dino_loss.state_dict(),
-            'rpn': rpn.state_dict(),
-            'rpn_optimizer': rpn_optimizer.state_dict() if rpn_optimizer else None,
+            'stn': stn.state_dict(),
+            'stn_optimizer': stn_optimizer.state_dict() if stn_optimizer else None,
         }
         if fp16_scaler is not None:
             save_dict['fp16_scaler'] = fp16_scaler.state_dict()
@@ -453,8 +453,8 @@ def train_dino(args):
 
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, data_loader,
-                    optimizer, rpn_optimizer, lr_schedule, wd_schedule, rpn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, rpn, use_pretrained_rpn, args, summary_writer):
+                    optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule, momentum_schedule, epoch,
+                    fp16_scaler, stn, use_pretrained_stn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
@@ -466,20 +466,20 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
 
-        if args.use_rpn_optimizer and not use_pretrained_rpn:
-            for i, param_group in enumerate(rpn_optimizer.param_groups):
-                param_group["lr"] = rpn_lr_schedule[it]
+        if args.use_stn_optimizer and not use_pretrained_stn:
+            for i, param_group in enumerate(stn_optimizer.param_groups):
+                param_group["lr"] = stn_lr_schedule[it]
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
-        # print(f"rank {torch.distributed.get_rank()}: image shape before rpn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
+        # print(f"rank {torch.distributed.get_rank()}: image shape before stn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
 
         if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
             uncropped_images = copy.deepcopy(images)
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            stn_images = rpn(images)
+            stn_images = stn(images)
             penalty = 0
             if args.similarity_penalty:
                 penalty = sim_loss(stn_images, images)
@@ -487,19 +487,19 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
                                                 epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_g1", theta=rpn.module.transform_net.affine_matrix_g1,
+                summary_writer.write_theta_heatmap(tag="theta_g1", theta=stn.module.transform_net.affine_matrix_g1,
                                                    epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_g2", theta=rpn.module.transform_net.affine_matrix_g2,
+                summary_writer.write_theta_heatmap(tag="theta_g2", theta=stn.module.transform_net.affine_matrix_g2,
                                                    epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_l1", theta=rpn.module.transform_net.affine_matrix_l1,
+                summary_writer.write_theta_heatmap(tag="theta_l1", theta=stn.module.transform_net.affine_matrix_l1,
                                                    epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_l2", theta=rpn.module.transform_net.affine_matrix_l2,
+                summary_writer.write_theta_heatmap(tag="theta_l2", theta=stn.module.transform_net.affine_matrix_l2,
                                                    epoch=epoch, global_step=it)
 
                 theta_g_euc_norm = np.linalg.norm(np.double(
-                    rpn.module.transform_net.affine_matrix_g2[0] - rpn.module.transform_net.affine_matrix_g1[0]), 2)
+                    stn.module.transform_net.affine_matrix_g2[0] - stn.module.transform_net.affine_matrix_g1[0]), 2)
                 theta_l_euc_norm = np.linalg.norm(np.double(
-                    rpn.module.transform_net.affine_matrix_l2[0] - rpn.module.transform_net.affine_matrix_l1[0]), 2)
+                    stn.module.transform_net.affine_matrix_l2[0] - stn.module.transform_net.affine_matrix_l1[0]), 2)
                 summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm,
                                             global_step=it)
                 summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm,
@@ -515,8 +515,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             if torch.distributed.get_rank() == 0:
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
                 summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
-                if args.use_rpn_optimizer and not use_pretrained_rpn:
-                    summary_writer.write_scalar(tag="lr rpn", scalar_value=rpn_optimizer.param_groups[0]["lr"],
+                if args.use_stn_optimizer and not use_pretrained_stn:
+                    summary_writer.write_scalar(tag="lr stn", scalar_value=stn_optimizer.param_groups[0]["lr"],
                                                 global_step=it)
                 summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"],
                                             global_step=it)
@@ -527,8 +527,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             print("Loss is {}, stopping training".format(loss.item()), force=True)
             raise ValueError("Loss value is invalid.")
 
-        if args.use_rpn_optimizer and not use_pretrained_rpn:
-            rpn_optimizer.zero_grad()
+        if args.use_stn_optimizer and not use_pretrained_stn:
+            stn_optimizer.zero_grad()
 
         # student update
         optimizer.zero_grad()
@@ -543,8 +543,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
             optimizer.step()
 
-            if args.use_rpn_optimizer and not use_pretrained_rpn:
-                rpn_optimizer.step()
+            if args.use_stn_optimizer and not use_pretrained_stn:
+                stn_optimizer.step()
 
         else:
             fp16_scaler.scale(loss).backward()
@@ -556,25 +556,25 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
             fp16_scaler.step(optimizer)
 
-            if args.use_rpn_optimizer and not use_pretrained_rpn:
-                fp16_scaler.step(rpn_optimizer)
+            if args.use_stn_optimizer and not use_pretrained_stn:
+                fp16_scaler.step(stn_optimizer)
 
             fp16_scaler.update()
 
         if it % args.grad_check_freq == 0:
-            print(rpn.module.transform_net.fc_localization_local1.linear2.weight)
+            print(stn.module.transform_net.fc_localization_local1.linear2.weight)
             if args.separate_localization_net:
-                print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight)
+                print(stn.module.transform_net.localization_net_g1.conv2d_2.weight)
             else:
-                print(rpn.module.transform_net.localization_net.conv2d_2.weight)
+                print(stn.module.transform_net.localization_net.conv2d_2.weight)
             print("-------------------------sanity check local grads-------------------------------")
-            print(rpn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+            print(stn.module.transform_net.fc_localization_local1.linear2.weight.grad)
             print("-------------------------sanity check global grads-------------------------------")
-            print(rpn.module.transform_net.fc_localization_global1.linear2.weight.grad)
+            print(stn.module.transform_net.fc_localization_global1.linear2.weight.grad)
             if args.separate_localization_net:
-                print(rpn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
+                print(stn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
             else:
-                print(rpn.module.transform_net.localization_net.conv2d_2.weight.grad)
+                print(stn.module.transform_net.localization_net.conv2d_2.weight.grad)
             print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
             print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
@@ -592,8 +592,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        if args.use_rpn_optimizer and not use_pretrained_rpn:
-            metric_logger.update(lrrpn=rpn_optimizer.param_groups[0]["lr"])
+        if args.use_stn_optimizer and not use_pretrained_stn:
+            metric_logger.update(lrstn=stn_optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
     # gather the stats from all processes
