@@ -664,7 +664,7 @@ class SIMLoss(nn.Module):
         self.loss_fn = SSIM()
         self.resize = transforms.Resize(resolution)
         self.min_sim = 1 - min_sim
-        self.invert = 1 if invert else -1
+        self.invert = -1 if invert else 1
 
     def forward(self, output, target):
         target = self.resize(torch.stack(target))
