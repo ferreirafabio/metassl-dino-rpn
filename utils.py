@@ -874,40 +874,37 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
 
 
-def image_grid(images, original_images, epoch, batch_size=16):
+def image_grid(images, original_images, epoch, plot_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(20, 50))
     figure.tight_layout()
-
+    num_images = min(len(original_images), plot_size)
     plt.subplots_adjust(hspace=0.5)
-    # plt.subplots_adjust(hspace=None)
-    # images = list(images)
-    # original_images = list(original_images)
-    
+
     g1 = images[0]
     g2 = images[1]
     l1 = images[2]
     l2 = images[3]
-    
+
     titles = [f"orig@{epoch} epoch", "global 1", "global 2", "local 1", "local 2"]
-    
     total = 0
-    for i, orig_img in enumerate(original_images, 1):
-        g1_img = g1[i - 1]
-        g2_img = g2[i - 1]
-        l1_img = l1[i - 1]
-        l2_img = l2[i - 1]
+    for i in range(num_images):  # orig_img in enumerate(original_images, 1):
+        orig_img = original_images[i]
+        g1_img = g1[i]
+        g2_img = g2[i]
+        l1_img = l1[i]
+        l2_img = l2[i]
         all_images = [orig_img, g1_img, g2_img, l1_img, l2_img]
-        for j in range(1, 6):
+        for j in range(5):
             total += 1
 
-            plt.subplot(16, 5, total, title=titles[j-1])  # todo: support higher batch sizes
+            plt.subplot(num_images, 5, total, title=titles[j])
             plt.xticks([])
             plt.yticks([])
             plt.grid(False)
-            
-            img = all_images[j-1].cpu().detach().numpy()
+
+            img = all_images[j].cpu().detach().numpy()
 
             if img.shape[0] == 3:
                 # CIFAR100 and ImageNet case
@@ -915,9 +912,9 @@ def image_grid(images, original_images, epoch, batch_size=16):
             else:
                 # MNIST case
                 img = img.squeeze()
-                
-            plt.imshow(img)
-    
+
+            plt.imshow(np.clip(img, 0, 1))
+
     return figure
 
 
@@ -936,7 +933,7 @@ class SummaryWriterCustom(SummaryWriter):
         self.writer = SummaryWriter(out_path)
 
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
-        fig = image_grid(images=images, original_images=original_images, epoch=epoch, batch_size=self.batch_size)
+        fig = image_grid(images=images, original_images=original_images, epoch=epoch, plot_size=self.batch_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
         
     def write_theta_heatmap(self, tag, theta, epoch, global_step):

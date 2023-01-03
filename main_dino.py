@@ -43,6 +43,7 @@ torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(torchvision_models.__dict__[name]))
 
+
 def get_args_parser():
     parser = argparse.ArgumentParser('DINO', add_help=False)
 
@@ -124,6 +125,8 @@ def get_args_parser():
     # Misc
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
+    parser.add_argument('--dataset', default='ImageNet', type=str,
+        help='Please specify the name of the dataset.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
     parser.add_argument('--saveckp_freq', default=3, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
@@ -155,7 +158,7 @@ def get_args_parser():
     parser.add_argument("--rpn_conv1_depth", default=32, type=int, help="Specifies the number of feature maps of conv1 for the RPN localization network (default: 32).")
     parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
     parser.add_argument("--resize_all_inputs", default=False, type=utils.bool_flag, help="Specifies whether all inputs should be resized to have the same resolution. When set to true, the RPN will be trained batch-wise. Only has an effect when training on ImageNet.")
-    
+    parser.add_argument("--stn_theta_norm", default=False, type=utils.bool_flag, help="Set this flag to normalize 'theta' in the STN before passing it to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
     
@@ -209,8 +212,12 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                 transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ])
         collate_fn = None
-    else:
-        raise NotImplementedError
+    elif args.dataset == "CIFAR10":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        collate_fn = None
     
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
@@ -262,6 +269,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
                         use_unbounded_stn=args.use_unbounded_stn,
                         conv1_depth=args.rpn_conv1_depth,
                         conv2_depth=args.rpn_conv2_depth,
+                        theta_norm=args.stn_theta_norm
                         )
     rpn = AugmentationNetwork(transform_net=transform_net)
     

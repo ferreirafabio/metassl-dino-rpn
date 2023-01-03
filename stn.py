@@ -135,6 +135,7 @@ class STN(nn.Module):
                  use_unbounded_stn=False,
                  conv1_depth=32,
                  conv2_depth=32,
+                 theta_norm=False
                  ):
         super(STN, self).__init__()
         self.stn_mode = stn_mode
@@ -148,6 +149,7 @@ class STN(nn.Module):
         self.use_unbounded_stn = use_unbounded_stn
         self.conv1_depth = conv1_depth
         self.conv2_depth = conv2_depth
+        self.theta_norm = theta_norm
         
         self.affine_matrix_g1 = None
         self.affine_matrix_g2 = None
@@ -399,19 +401,17 @@ class STN(nn.Module):
         self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
         self.affine_matrix_l2 = theta_l2.cpu().detach().numpy()
         
-        # print(f"theta g1: {theta_g1}")
-        # print(f"theta g1[shape]: {theta_g1.shape}")
-        # print(f"theta g1[0]]: {theta_g1[0]}")
-        # print(f"theta g1[1]: {theta_g1[1]}")
-        # print(f"theta g2: {theta_g2}")
-        # print(f"theta l1: {theta_l1}")
-        # print(f"theta l2: {theta_l2}")
-        
         high_res = 224
         low_res = 96
         one_res = 128
         if self.use_one_res:
             low_res, high_res = one_res, one_res
+
+        if self.theta_norm:
+            theta_g1 = theta_g1 / torch.linalg.norm(theta_g1, ord=1, dim=2, keepdim=True)
+            theta_g2 = theta_g2 / torch.linalg.norm(theta_g2, ord=1, dim=2, keepdim=True)
+            theta_l1 = theta_l1 / torch.linalg.norm(theta_l1, ord=1, dim=2, keepdim=True)
+            theta_l2 = theta_l2 / torch.linalg.norm(theta_l2, ord=1, dim=2, keepdim=True)
         
         gridg1 = F.affine_grid(theta_g1, size=list(x.size()[:2]) + [high_res, high_res])
         g1 = F.grid_sample(x, gridg1)
@@ -433,7 +433,6 @@ class AugmentationNetwork(nn.Module):
         super().__init__()
         print("Initializing Augmentation Network")
         self.transform_net = transform_net
-        
 
     def forward(self, imgs):
         global_views1_list, global_views2_list, local_views1_list, local_views2_list = [], [], [], []
@@ -474,8 +473,8 @@ class AugmentationNetwork(nn.Module):
             return self.transform_net(imgs)
             
         else:
-            # CIFAR10/100 probably
-            raise NotImplementedError
+            imgs = torch.stack(imgs, dim=0)
+            return self.transform_net(imgs)
             
 
         
