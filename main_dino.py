@@ -12,34 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import os
-import sys
-import datetime
-import time
-import math
-import json
-from pathlib import Path
 import copy
+import datetime
+import json
+import math
+import os
+import time
+from pathlib import Path
+
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.distributed as dist
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
+import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
 
 import utils
-from utils import custom_collate, SummaryWriterCustom, load_dataset
 import vision_transformer as vits
+from losses import HISTLoss, SIMLoss
+from stn import AugmentationNetwork, STN
+from utils import custom_collate, SummaryWriterCustom
 from vision_transformer import DINOHead
-from stn import AugmentationNetwork
-from stn import STN
-from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
                            if name.islower() and not name.startswith("__")
                            and callable(torchvision_models.__dict__[name]))
+
+loss_dict = {
+    "simloss": SIMLoss,
+    "histloss": HISTLoss
+}
 
 
 def get_args_parser():
@@ -144,7 +148,7 @@ def get_args_parser():
     parser.add_argument('--stn_mode', default='affine', type=str,
                         help='Determines the STN mode (choose from: affine, translation, scale, rotation, '
                              'rotation_scale, translation_scale, rotation_translation, rotation_translation_scale')
-    parser.add_argument("--stnlr", default=5e-4, type=float, help="""Learning rate at the end of
+    parser.add_argument("--stn_lr", default=5e-4, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training) of the STN optimizer. The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
     parser.add_argument("--separate_localization_net", default=False, type=utils.bool_flag,
@@ -175,9 +179,11 @@ def get_args_parser():
                         help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
     parser.add_argument("--stn_theta_norm", default=False, type=utils.bool_flag,
                         help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
-    parser.add_argument("--similarity_penalty", default=False, type=utils.bool_flag,
+    parser.add_argument("--use_similarity_penalty", default=False, type=utils.bool_flag,
                         help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
-    parser.add_argument("--invert_sim_pen", default=False, type=utils.bool_flag,
+    parser.add_argument("--similarity_measure", default="histloss", type=str,
+                        help="Specify the name if the similarity to use.")
+    parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
                         help="Invert the Similarity Penalty Loss.")
     parser.add_argument("--min_sim_pen", default=1.0, type=float,
                         help="Set the minimal similarity value of SIMLoss. Sets the loss to 0 if it the similarity higher.")
@@ -315,11 +321,23 @@ def train_dino(args):
         min_res = args.local_res
     if args.use_one_res:
         min_res = min(min_res, args.one_res)
-    sim_loss = SIMLoss(
-        min_res,
-        min_sim=args.min_sim_pen,
-        invert=args.invert_sim_pen
-    ).cuda()
+    sim_loss = None
+    if args.use_similarity_penalty:
+        # argz = {
+        #     'invert': args.invert_penalty,
+        #     'min_sim': args.min_sim_pen,
+        #     'resolution': 32,
+        #     'exponent': 2,
+        #     'bins': 100,
+        # }
+        Loss = loss_dict[args.similarity_measure]
+        sim_loss = Loss(
+            invert=args.invert_penalty,
+            min_sim=args.min_sim_pen,
+            resolution=32,
+            exponent=2,
+            bins=100
+        ).cuda()
 
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
@@ -378,7 +396,7 @@ def train_dino(args):
     stn_lr_schedule = None
     if stn_optimizer and not use_pretrained_stn:
         stn_lr_schedule = utils.cosine_scheduler(
-            args.stnlr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+            args.stn_lr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
             args.min_lr,
             args.epochs, len(data_loader),
             warmup_epochs=args.stn_warmup_epochs,
@@ -481,7 +499,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             stn_images = stn(images)
             penalty = 0
-            if args.similarity_penalty:
+            if args.use_similarity_penalty:
                 penalty = sim_loss(stn_images, images)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
@@ -525,6 +543,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()), force=True)
+            print(penalty)
             raise ValueError("Loss value is invalid.")
 
         if args.use_stn_optimizer and not use_pretrained_stn:
@@ -656,24 +675,6 @@ class DINOLoss(nn.Module):
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
-
-
-class SIMLoss(nn.Module):
-    def __init__(self, resolution: int, min_sim: float = 1., invert=False):
-        super().__init__()
-        self.loss_fn = SSIM()
-        self.resize = transforms.Resize(resolution)
-        self.min_sim = 1 - min_sim
-        self.invert = -1 if invert else 1
-
-    def forward(self, output, target):
-        target = self.resize(torch.stack(target))
-        loss = 0
-        for itm in output:
-            step = 1 - self.loss_fn(self.resize(itm), target)
-            step[step < self.min_sim] = 0
-            loss += step
-        return self.invert * loss
 
 
 if __name__ == '__main__':
