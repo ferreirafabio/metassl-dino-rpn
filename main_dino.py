@@ -598,12 +598,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
         # EMA update for the teacher
+        # TODO: do we need EMA update for the global heads? grads flow to global heads for now since we don't stop gradient there but may be worth trying to mimic DINO
         with torch.no_grad():
             m = momentum_schedule[it]  # momentum parameter
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-
-        # TODO: do we need EMA update for the global heads? grads flow to global heads for now since we don't stop gradient there but may be worth trying to mimic DINO
 
         del images
 

@@ -31,7 +31,7 @@ import vision_transformer as vits
 
 def eval_linear(args):
     utils.fix_random_seeds(args.seed)
-    utils.init_distributed_mode(args, None)
+    utils.init_distributed_mode(args)
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
