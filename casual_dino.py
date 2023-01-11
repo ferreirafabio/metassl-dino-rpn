@@ -31,7 +31,7 @@ from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
-from losses import HISTLoss, SIMLoss
+from losses import HISTLoss, SIMLoss, ThetaLoss, GridLoss
 from stn import AugmentationNetwork, STN
 from utils import custom_collate, SummaryWriterCustom
 from vision_transformer import DINOHead
@@ -42,7 +42,9 @@ torchvision_archs = sorted(name for name in torchvision_models.__dict__
 
 loss_dict = {
     "simloss": SIMLoss,
-    "histloss": HISTLoss
+    "histloss": HISTLoss,
+    "thetaloss": ThetaLoss,
+    "gridloss": GridLoss,
 }
 
 
@@ -316,7 +318,8 @@ def train_dino(args):
             min_sim=args.min_sim_pen,
             resolution=32,
             exponent=2,
-            bins=100
+            bins=100,
+            device=torch.device('cuda')
         ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -474,10 +477,10 @@ def train_one_epoch(student, teacher, dino_loss, sim_loss, data_loader,
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            stn_images = stn(images)
+            stn_images, theta, grid = stn(images)
             penalty = 0
             if args.use_similarity_penalty:
-                penalty = sim_loss(stn_images, images)
+                penalty = sim_loss(images=stn_images, theta=theta, grid=grid, target=images)
 
             if it % args.summary_writer_freq == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,

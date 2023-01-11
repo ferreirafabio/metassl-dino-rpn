@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 from torchvision import transforms
 
@@ -125,7 +126,7 @@ class HSIM(nn.Module):
 
 class HISTLoss(nn.Module):
     def __init__(self, bins=100, exponent=2, invert=False, **kwargs):
-        super(HISTLoss).__init__()
+        super().__init__()
         self.bins = bins
         self.exponent = exponent
         self.invert = -1 if invert else 1
@@ -150,11 +151,40 @@ class SIMLoss(nn.Module):
         self.min_sim = 1 - min_sim
         self.invert = -1 if invert else 1
 
-    def forward(self, output, target):
+    def forward(self, images, target, **kwargs):
         target = self.resize(torch.stack(target))
         loss = 0
-        for itm in output:
-            step = 1 - self.loss_fn(self.resize(itm), target)
+        for img in images:
+            step = 1 - self.loss_fn(self.resize(img), target)
             step[step < self.min_sim] = 0
             loss += step
         return self.invert * loss
+
+
+class ThetaLoss(nn.Module):
+    def __init__(self, device=torch.device('cuda'), **kwargs):
+        super().__init__()
+        self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=device)
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, theta, **args):
+        loss = 0
+        for t in theta:
+            loss = loss + self.loss_fn(t, self.identity)
+        return loss
+
+
+class GridLoss(nn.Module):
+    def __init__(self, device=torch.device('cuda'), **kwargs):
+        super().__init__()
+        self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=device)
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, grid, **kwargs):
+        loss = 0
+        for g in grid:
+            size = [g.size(0), 1, g.size(1), g.size(2)]
+            identity = self.identity.expand(g.size(0), 2, 3)
+            grid_identity = F.affine_grid(identity, size)
+            loss = loss + self.loss_fn(g, grid_identity)
+        return loss
