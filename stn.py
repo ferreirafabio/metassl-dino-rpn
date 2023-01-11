@@ -396,7 +396,7 @@ class STN(nn.Module):
             theta_g2 = self._get_stn_mode_theta(theta_g2, x_loc_features)
             theta_l1 = self._get_stn_mode_theta(theta_l1, x_loc_features)
             theta_l2 = self._get_stn_mode_theta(theta_l2, x_loc_features)
-
+        #
         self.affine_matrix_g1 = theta_g1.cpu().detach().numpy()
         self.affine_matrix_g2 = theta_g2.cpu().detach().numpy()
         self.affine_matrix_l1 = theta_l1.cpu().detach().numpy()
@@ -420,7 +420,7 @@ class STN(nn.Module):
         gridl2 = F.affine_grid(theta_l2, size=list(x.size()[:2]) + [self.low_res, self.low_res])
         l2 = F.grid_sample(x, gridl2)
 
-        return [g1, g2, l1, l2]
+        return [g1, g2, l1, l2], [theta_g1, theta_g2, theta_l1, theta_l2], [gridg1, gridg2, gridl1, gridl2]
 
 
 class AugmentationNetwork(nn.Module):
@@ -441,7 +441,7 @@ class AugmentationNetwork(nn.Module):
                 except Exception as e:
                     print(e)
 
-                global_local_views = self.transform_net(img)
+                global_local_views, _, _ = self.transform_net(img)
 
                 g1_augmented = torch.squeeze(global_local_views[0], 0)
                 g2_augmented = torch.squeeze(global_local_views[1], 0)
