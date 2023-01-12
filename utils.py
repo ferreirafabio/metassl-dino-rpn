@@ -17,6 +17,7 @@ Misc functions.
 Mostly copy-paste from torchvision references or other public repos like DETR:
 https://github.com/facebookresearch/detr/blob/master/util/misc.py
 """
+import argparse
 import os
 import sys
 import time
@@ -24,6 +25,8 @@ import math
 import random
 import datetime
 import subprocess
+import warnings
+
 import seaborn as sns
 from collections import defaultdict, deque
 
@@ -76,13 +79,13 @@ class Solarization(nn.Module):
             return img
 
 
-def load_rpn_pretrained_weights(model, pretrained_weights):
+def load_stn_pretrained_weights(model, pretrained_weights):
     if os.path.isfile(pretrained_weights):
         state_dict = torch.load(pretrained_weights, map_location="cpu")
         # remove `module.` prefix
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-        msg = model.load_state_dict(state_dict["rpn"], strict=False)
-        print('RPN Pretrained weights found at {} and loaded with msg: {}'.format(pretrained_weights, msg))
+        msg = model.load_state_dict(state_dict["stn"], strict=False)
+        print('STN Pretrained weights found at {} and loaded with msg: {}'.format(pretrained_weights, msg))
 
 
 def load_pretrained_weights(model, pretrained_weights, checkpoint_key, model_name, patch_size):
@@ -481,14 +484,14 @@ def setup_for_distributed(is_master):
     __builtin__.print = print
 
 
-def init_distributed_mode(args, rank):
+def init_distributed_mode(args):
+    # launched with torch.distributed.launch
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-        # print("1")
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
         args.gpu = int(os.environ['LOCAL_RANK'])
+    # launched with submitit on a slurm cluster
     elif 'SLURM_PROCID' in os.environ:
-        # print("2")
         args.rank = int(os.environ['SLURM_PROCID'])
         args.gpu = args.rank % torch.cuda.device_count()
     # launched naively with `python main_dino.py`
@@ -501,17 +504,13 @@ def init_distributed_mode(args, rank):
     else:
         print('Does not support training without GPU.')
         sys.exit(1)
-        
-    # print("invoking init_process_group")
-    # print(args.dist_url, args.world_size, args.rank)
+
     dist.init_process_group(
         backend="nccl",
-        # backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
     )
-    # print("invoking done")
 
     torch.cuda.set_device(args.gpu)
     print('| distributed init (rank {}): {}'.format(
@@ -878,12 +877,12 @@ def resnet9(pretrained: bool = False, **kwargs: Any) -> ResNet:
     return _resnet(block=BasicBlock, layers=[1, 1, 1, 1], **kwargs)
 
 
-def image_grid(images, original_images, epoch, batch_size=16):
+def image_grid(images, original_images, epoch, plot_size=16):
     """Return a 5x5 grid of the MNIST images as a matplotlib figure."""
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(20, 50))
     figure.tight_layout()
-    num_images = 32
+    num_images = min(len(original_images), plot_size)
     plt.subplots_adjust(hspace=0.5)
 
     g1 = images[0]
@@ -903,7 +902,7 @@ def image_grid(images, original_images, epoch, batch_size=16):
         for j in range(5):
             total += 1
 
-            plt.subplot(num_images, 5, total, title=titles[j])  # todo: support higher batch sizes
+            plt.subplot(num_images, 5, total, title=titles[j])
             plt.xticks([])
             plt.yticks([])
             plt.grid(False)
@@ -931,13 +930,13 @@ def theta_heatmap(theta, epoch):
 
 
 class SummaryWriterCustom(SummaryWriter):
-    def __init__(self, out_path, batch_size):
+    def __init__(self, out_path, plot_size):
         # super().__init__()
-        self.batch_size = batch_size
+        self.plot_size = plot_size
         self.writer = SummaryWriter(out_path)
 
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
-        fig = image_grid(images=images, original_images=original_images, epoch=epoch, batch_size=self.batch_size)
+        fig = image_grid(images=images, original_images=original_images, epoch=epoch, plot_size=self.plot_size)
         self.writer.add_figure(tag, fig, global_step=global_step)
 
     def write_theta_heatmap(self, tag, theta, epoch, global_step):

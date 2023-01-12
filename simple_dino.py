@@ -18,12 +18,12 @@ import json
 import math
 import os
 import time
+import sys
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
@@ -200,7 +200,6 @@ def get_args_parser():
 
 
 def train_dino(args):
-    utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
     cudnn.benchmark = True
 
@@ -215,12 +214,11 @@ def train_dino(args):
     ])
 
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
-    sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        sampler=sampler,
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
+        shuffle=True,
         pin_memory=True,
         drop_last=True,
         collate_fn=custom_collate,
@@ -283,26 +281,8 @@ def train_dino(args):
     # move networks to gpu
     student, teacher, stn = student.cuda(), teacher.cuda(), stn.cuda()
 
-    # synchronize batch norms (if any)
-    if utils.has_batchnorms(student):
-        student = nn.SyncBatchNorm.convert_sync_batchnorm(student)
-        teacher = nn.SyncBatchNorm.convert_sync_batchnorm(teacher)
-
-        # we need DDP wrapper to have synchro batch norms working...
-        teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu])
-        teacher_without_ddp = teacher.module
-
-    else:
-        # teacher_without_ddp and teacher are the same thing
-        teacher_without_ddp = teacher
-
-    if utils.has_batchnorms(stn):
-        stn = nn.SyncBatchNorm.convert_sync_batchnorm(stn)
-
-    student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
-    stn = nn.parallel.DistributedDataParallel(stn, device_ids=[args.gpu])
     # teacher and student start with the same weights
-    teacher_without_ddp.load_state_dict(student.module.state_dict())
+    teacher.load_state_dict(student.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
     for p in teacher.parameters():
         p.requires_grad = False
@@ -339,7 +319,8 @@ def train_dino(args):
             min_sim=args.min_sim_pen,
             resolution=32,
             exponent=2,
-            bins=100
+            bins=100,
+            device=torch.device('cuda')
         ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -430,9 +411,7 @@ def train_dino(args):
         for p in stn.parameters():
             p.requires_grad = False
 
-    summary_writer = None
-    if torch.distributed.get_rank() == 0:
-        summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", plot_size=args.summary_plot_size)
+    summary_writer = SummaryWriterCustom(Path(args.output_dir) / "summary", plot_size=args.summary_plot_size)
 
     start_time = time.time()
     print("Starting DINO training !")
@@ -440,9 +419,9 @@ def train_dino(args):
     end_epoch = args.epochs
 
     for epoch in range(start_epoch, end_epoch):
-        data_loader.sampler.set_epoch(epoch)
+        # data_loader.sampler.set_epoch(epoch)
         # ============ training one epoch of DINO ... ============
-        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss,
+        train_stats = train_one_epoch(student, teacher, dino_loss, sim_loss,
                                       data_loader, optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule,
                                       momentum_schedule,
                                       epoch, fp16_scaler, stn, use_pretrained_stn, args, summary_writer)
@@ -473,7 +452,7 @@ def train_dino(args):
     print('Training time {}'.format(total_time_str))
 
 
-def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, data_loader,
+def train_one_epoch(student, teacher, dino_loss, sim_loss, data_loader,
                     optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule, momentum_schedule, epoch,
                     fp16_scaler, stn, use_pretrained_stn, args, summary_writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -493,9 +472,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
-        # print(f"rank {torch.distributed.get_rank()}: image shape before stn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
 
-        if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
+        if it % args.summary_writer_freq == 0:
             uncropped_images = copy.deepcopy(images)
 
         # teacher and student forward passes + compute dino loss
@@ -504,24 +482,23 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             penalty = 0
             if args.use_similarity_penalty:
                 penalty = sim_loss(images=stn_images, theta=theta, target=images)
-            print(penalty)
 
-            if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
+            if it % args.summary_writer_freq == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
                                                 epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_g1", theta=stn.module.transform_net.affine_matrix_g1,
+                summary_writer.write_theta_heatmap(tag="theta_g1", theta=stn.transform_net.affine_matrix_g1,
                                                    epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_g2", theta=stn.module.transform_net.affine_matrix_g2,
+                summary_writer.write_theta_heatmap(tag="theta_g2", theta=stn.transform_net.affine_matrix_g2,
                                                    epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_l1", theta=stn.module.transform_net.affine_matrix_l1,
+                summary_writer.write_theta_heatmap(tag="theta_l1", theta=stn.transform_net.affine_matrix_l1,
                                                    epoch=epoch, global_step=it)
-                summary_writer.write_theta_heatmap(tag="theta_l2", theta=stn.module.transform_net.affine_matrix_l2,
+                summary_writer.write_theta_heatmap(tag="theta_l2", theta=stn.transform_net.affine_matrix_l2,
                                                    epoch=epoch, global_step=it)
 
                 theta_g_euc_norm = np.linalg.norm(np.double(
-                    stn.module.transform_net.affine_matrix_g2[0] - stn.module.transform_net.affine_matrix_g1[0]), 2)
+                    stn.transform_net.affine_matrix_g2[0] - stn.transform_net.affine_matrix_g1[0]), 2)
                 theta_l_euc_norm = np.linalg.norm(np.double(
-                    stn.module.transform_net.affine_matrix_l2[0] - stn.module.transform_net.affine_matrix_l1[0]), 2)
+                    stn.transform_net.affine_matrix_l2[0] - stn.transform_net.affine_matrix_l1[0]), 2)
                 summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm,
                                             global_step=it)
                 summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm,
@@ -532,23 +509,20 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
             student_output = student(stn_images)
-            print("teacher", teacher_output.shape)
-            print("student", student_output.shape)
             loss = dino_loss(student_output, teacher_output, epoch) + penalty
 
-            if torch.distributed.get_rank() == 0:
-                summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
-                summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
-                if args.use_stn_optimizer and not use_pretrained_stn:
-                    summary_writer.write_scalar(tag="lr stn", scalar_value=stn_optimizer.param_groups[0]["lr"],
-                                                global_step=it)
-                summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"],
+            summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
+            summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
+            if args.use_stn_optimizer and not use_pretrained_stn:
+                summary_writer.write_scalar(tag="lr stn", scalar_value=stn_optimizer.param_groups[0]["lr"],
                                             global_step=it)
+            summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"],
+                                        global_step=it)
 
             metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
         if not math.isfinite(loss.item()):
-            print("Loss is {}, stopping training".format(loss.item()), force=True)
+            print("Loss is {}, stopping training".format(loss.item()))
             print(penalty)
             raise ValueError("Loss value is invalid.")
 
@@ -576,41 +550,35 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             if args.clip_grad:
                 fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
                 param_norms = utils.clip_gradients(student, args.clip_grad)
-            utils.cancel_gradients_last_layer(epoch, student,
-                                              args.freeze_last_layer)
-
+            utils.cancel_gradients_last_layer(epoch, student, args.freeze_last_layer)
             fp16_scaler.step(optimizer)
 
             if args.use_stn_optimizer and not use_pretrained_stn:
                 fp16_scaler.step(stn_optimizer)
-
             fp16_scaler.update()
 
         if it % args.grad_check_freq == 0:
-            print(stn.module.transform_net.fc_localization_local1.linear2.weight)
+            print(stn.transform_net.fc_localization_local1.linear2.weight)
             if args.separate_localization_net:
-                print(stn.module.transform_net.localization_net_g1.conv2d_2.weight)
+                print(stn.transform_net.localization_net_g1.conv2d_2.weight)
             else:
-                print(stn.module.transform_net.localization_net.conv2d_2.weight)
+                print(stn.transform_net.localization_net.conv2d_2.weight)
             print("-------------------------sanity check local grads-------------------------------")
-            print(stn.module.transform_net.fc_localization_local1.linear2.weight.grad)
+            print(stn.transform_net.fc_localization_local1.linear2.weight.grad)
             print("-------------------------sanity check global grads-------------------------------")
-            print(stn.module.transform_net.fc_localization_global1.linear2.weight.grad)
+            print(stn.transform_net.fc_localization_global1.linear2.weight.grad)
             if args.separate_localization_net:
-                print(stn.module.transform_net.localization_net_g1.conv2d_2.weight.grad)
+                print(stn.transform_net.localization_net_g1.conv2d_2.weight.grad)
             else:
-                print(stn.module.transform_net.localization_net.conv2d_2.weight.grad)
+                print(stn.transform_net.localization_net.conv2d_2.weight.grad)
             print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
             print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
         # EMA update for the teacher
-        # TODO: do we need EMA update for the global heads? grads flow to global heads for now since we don't stop gradient there but may be worth trying to mimic DINO
         with torch.no_grad():
             m = momentum_schedule[it]  # momentum parameter
-            for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
+            for param_q, param_k in zip(student.parameters(), teacher.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-
-        del images
 
         # logging
         torch.cuda.synchronize()
@@ -621,7 +589,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
     # gather the stats from all processes
-    metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
@@ -675,8 +642,7 @@ class DINOLoss(nn.Module):
         Update center used for teacher output.
         """
         batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
-        dist.all_reduce(batch_center)
-        batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
+        batch_center = batch_center / len(teacher_output)
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
