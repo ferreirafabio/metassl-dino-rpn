@@ -141,6 +141,8 @@ def get_args_parser():
     parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
+    parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
+                        help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
 
     # STN
     parser.add_argument("--invert_stn_gradients", default=False, type=utils.bool_flag,
@@ -176,18 +178,16 @@ def get_args_parser():
                         help="Specifies the number of feature maps of conv1 for the STN localization network (default: 32).")
     parser.add_argument("--stn_conv2_depth", default=32, type=int,
                         help="Specifies the number of feature maps of conv2 for the STN localization network (default: 32).")
-    parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
-                        help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
     parser.add_argument("--stn_theta_norm", default=False, type=utils.bool_flag,
                         help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
-    parser.add_argument("--use_similarity_penalty", default=False, type=utils.bool_flag,
+    parser.add_argument("--use_stn_penalty", default=False, type=utils.bool_flag,
                         help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
-    parser.add_argument("--similarity_measure", default="simloss", type=str, choices=list(penalty_dict.keys()),
+    parser.add_argument("--penalty_loss", default="simloss", type=str, choices=list(penalty_dict.keys()),
                         help="Specify the name if the similarity to use.")
+    parser.add_argument("--epsilon", default=1., type=float,
+                        help="Scalar for the penalty loss")
     parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
-                        help="Invert the Similarity Penalty Loss.")
-    parser.add_argument("--min_sim_pen", default=1.0, type=float,
-                        help="Set the minimal similarity value of SIMLoss. Sets the loss to 0 if the similarity is higher.")
+                        help="Invert the penalty loss.")
     parser.add_argument("--global_res", default=224, type=int, help="Global output resolution of the STN")
     parser.add_argument("--local_res", default=96, type=int, help="Local output resolution of the STN")
     parser.add_argument("--one_res", default=128, type=int,
@@ -325,7 +325,7 @@ def train_dino(args):
     if args.use_one_res:
         min_res = min(min_res, args.one_res)
     sim_loss = None
-    if args.use_similarity_penalty:
+    if args.use_stn_penalty:
         # argz = {
         #     'invert': args.invert_penalty,
         #     'min_sim': args.min_sim_pen,
@@ -333,13 +333,13 @@ def train_dino(args):
         #     'exponent': 2,
         #     'bins': 100,
         # }
-        Loss = penalty_dict[args.similarity_measure]
+        Loss = penalty_dict[args.penalty_loss]
         sim_loss = Loss(
             invert=args.invert_penalty,
-            min_sim=args.min_sim_pen,
             resolution=32,
             exponent=2,
-            bins=100
+            bins=100,
+            eps=args.epsilon,
         ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -502,9 +502,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             stn_images, theta = stn(images)
             penalty = 0
-            if args.use_similarity_penalty:
+            if args.use_stn_penalty:
                 penalty = sim_loss(images=stn_images, theta=theta, target=images)
-            print(penalty)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
@@ -532,8 +531,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
             student_output = student(stn_images)
-            print("teacher", teacher_output.shape)
-            print("student", student_output.shape)
             loss = dino_loss(student_output, teacher_output, epoch) + penalty
 
             if torch.distributed.get_rank() == 0:
@@ -548,8 +545,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
         if not math.isfinite(loss.item()):
-            print("Loss is {}, stopping training".format(loss.item()), force=True)
-            print(penalty)
+            print("Loss is {}, stopping training".format(loss.item()))
             raise ValueError("Loss value is invalid.")
 
         if args.use_stn_optimizer and not use_pretrained_stn:
@@ -586,7 +582,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
             fp16_scaler.update()
 
-        if it % args.grad_check_freq == 0:
+        if it % args.grad_check_freq == 0 and torch.distributed.get_rank() == 0:
             print(stn.module.transform_net.fc_localization_local1.linear2.weight)
             if args.separate_localization_net:
                 print(stn.module.transform_net.localization_net_g1.conv2d_2.weight)

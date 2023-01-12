@@ -162,10 +162,11 @@ class SIMLoss(nn.Module):
 
 
 class ThetaLoss(nn.Module):
-    def __init__(self, device=torch.device('cuda'), eps=0.05, **kwargs):
+    def __init__(self, eps=1, device=torch.device('cuda'), **kwargs):
         super().__init__()
         self.eps = eps
-        self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=device)
+        self.device = device
+        self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=self.device)
         self.loss_fn = nn.MSELoss()
 
     def forward(self, theta, **args):
