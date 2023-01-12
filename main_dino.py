@@ -31,7 +31,7 @@ from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
-from losses import HISTLoss, SIMLoss
+from penalty_losses import HISTLoss, SIMLoss
 from stn import AugmentationNetwork, STN
 from utils import custom_collate, SummaryWriterCustom
 from vision_transformer import DINOHead
@@ -497,7 +497,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            stn_images = stn(images)
+            stn_images, _, _ = stn(images)
             penalty = 0
             if args.use_similarity_penalty:
                 penalty = sim_loss(stn_images, images)
