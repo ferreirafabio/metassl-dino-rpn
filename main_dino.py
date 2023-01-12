@@ -31,7 +31,7 @@ from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
-from penalty_losses import HISTLoss, SIMLoss
+from penalty_losses import HISTLoss, SIMLoss, ThetaLoss
 from stn import AugmentationNetwork, STN
 from utils import custom_collate, SummaryWriterCustom
 from vision_transformer import DINOHead
@@ -40,9 +40,10 @@ torchvision_archs = sorted(name for name in torchvision_models.__dict__
                            if name.islower() and not name.startswith("__")
                            and callable(torchvision_models.__dict__[name]))
 
-loss_dict = {
+penalty_dict = {
     "simloss": SIMLoss,
-    "histloss": HISTLoss
+    "histloss": HISTLoss,
+    "thetaloss": ThetaLoss,
 }
 
 
@@ -126,8 +127,10 @@ def get_args_parser():
         Used for small local view cropping of multi-crop.""")
 
     # Misc
-    parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
-                        help='Please specify path to the ImageNet training data.')
+    parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
+                        help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
+    parser.add_argument('--data_path', default='/path/to/dataset/train/', type=str,
+                        help='Please specify path to the training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
     parser.add_argument('--saveckp_freq', default=3, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
@@ -175,18 +178,16 @@ def get_args_parser():
                         help="Specifies the number of feature maps of conv2 for the STN localization network (default: 32).")
     parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
                         help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
-    parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
-                        help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
     parser.add_argument("--stn_theta_norm", default=False, type=utils.bool_flag,
                         help="Set this flag to normalize 'theta' in the STN before passing to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
     parser.add_argument("--use_similarity_penalty", default=False, type=utils.bool_flag,
                         help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
-    parser.add_argument("--similarity_measure", default="histloss", type=str,
+    parser.add_argument("--similarity_measure", default="simloss", type=str, choices=list(penalty_dict.keys()),
                         help="Specify the name if the similarity to use.")
     parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
                         help="Invert the Similarity Penalty Loss.")
     parser.add_argument("--min_sim_pen", default=1.0, type=float,
-                        help="Set the minimal similarity value of SIMLoss. Sets the loss to 0 if it the similarity higher.")
+                        help="Set the minimal similarity value of SIMLoss. Sets the loss to 0 if the similarity is higher.")
     parser.add_argument("--global_res", default=224, type=int, help="Global output resolution of the STN")
     parser.add_argument("--local_res", default=96, type=int, help="Local output resolution of the STN")
     parser.add_argument("--one_res", default=128, type=int,
@@ -201,9 +202,11 @@ def get_args_parser():
 def train_dino(args):
     utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
-
     cudnn.benchmark = True
+
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
+    with (Path(args.output_dir) / "settings.json").open("w") as f:
+        json.dump(args.__dict__, f, indent=2, sort_keys=True)
 
     # ============ preparing data ... ============
     transform = transforms.Compose([
@@ -330,7 +333,7 @@ def train_dino(args):
         #     'exponent': 2,
         #     'bins': 100,
         # }
-        Loss = loss_dict[args.similarity_measure]
+        Loss = penalty_dict[args.similarity_measure]
         sim_loss = Loss(
             invert=args.invert_penalty,
             min_sim=args.min_sim_pen,
@@ -497,10 +500,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            stn_images, _, _ = stn(images)
+            stn_images, theta = stn(images)
             penalty = 0
             if args.use_similarity_penalty:
-                penalty = sim_loss(stn_images, images)
+                penalty = sim_loss(images=stn_images, theta=theta, target=images)
+            print(penalty)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
@@ -528,6 +532,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
             student_output = student(stn_images)
+            print("teacher", teacher_output.shape)
+            print("student", student_output.shape)
             loss = dino_loss(student_output, teacher_output, epoch) + penalty
 
             if torch.distributed.get_rank() == 0:

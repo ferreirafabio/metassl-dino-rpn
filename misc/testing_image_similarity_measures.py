@@ -9,7 +9,7 @@ from torchmetrics import PeakSignalNoiseRatio as PSNR
 from torchmetrics.image.ergas import ErrorRelativeGlobalDimensionlessSynthesis as ERGAS
 from torchvision import datasets, transforms
 from torchvision.transforms.functional import InterpolationMode
-from losses import HSIM
+from penalty_losses import HSIM
 from piqa.fsim import FSIM
 from piqa.vsi import VSI
 from piqa import gmsd, fsim, haarpsi, vsi

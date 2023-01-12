@@ -162,8 +162,9 @@ class SIMLoss(nn.Module):
 
 
 class ThetaLoss(nn.Module):
-    def __init__(self, device=torch.device('cuda'), **kwargs):
+    def __init__(self, device=torch.device('cuda'), eps=0.05, **kwargs):
         super().__init__()
+        self.eps = eps
         self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=device)
         self.loss_fn = nn.MSELoss()
 
@@ -171,10 +172,13 @@ class ThetaLoss(nn.Module):
         loss = 0
         for t in theta:
             loss = loss + self.loss_fn(t, self.identity)
-        return loss
+        return self.eps * loss
 
 
 class GridLoss(nn.Module):
+    """
+    Actually not needed. It is the same as the ThetaLoss.
+    """
     def __init__(self, device=torch.device('cuda'), **kwargs):
         super().__init__()
         self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=device)
