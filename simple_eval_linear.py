@@ -24,6 +24,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets
 from torchvision import transforms
 from torchvision import models as torchvision_models
+from torchvision.transforms import InterpolationMode
 
 import utils
 import vision_transformer as vits
@@ -263,7 +264,7 @@ class LinearClassifier(nn.Module):
         return self.linear(x)
 
 
-def load_transforms(dataset):
+def load_transforms(dataset: str):
     if dataset == "ImageNet":
         train = transforms.Compose([
             transforms.RandomResizedCrop(224),
@@ -272,14 +273,14 @@ def load_transforms(dataset):
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
         val = transforms.Compose([
-            transforms.Resize(256, interpolation=3),
+            transforms.Resize(256, interpolation=InterpolationMode.BILINEAR),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     elif dataset == "CIFAR10":
         train = transforms.Compose([
-            transforms.RandomResizedCrop(size=32, scale=(0.2, 1.)),
+            transforms.RandomResizedCrop(size=224, scale=(0.2, 1.), interpolation=InterpolationMode.BILINEAR),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply(
                 nn.ModuleList([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)]),
@@ -290,6 +291,8 @@ def load_transforms(dataset):
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
         val = transforms.Compose([
+            transforms.Resize(256, interpolation=InterpolationMode.BILINEAR),
+            transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
