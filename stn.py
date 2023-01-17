@@ -128,7 +128,7 @@ class STN(nn.Module):
                  conv1_depth=32,
                  conv2_depth=32,
                  resize_input=False,
-                 theta_norm=True,
+                 theta_norm=False,
                  global_res=224,
                  local_res=96,
                  one_res=128

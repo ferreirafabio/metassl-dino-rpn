@@ -40,7 +40,7 @@ def histogram_batch(
     u = torch.abs(input.flatten(1).unsqueeze(0) - centers) / delta
 
     if kernel == "gaussian":
-        kernel_values = torch.exp(-0.5 * u**2)
+        kernel_values = torch.exp(-0.5 * u ** 2)
     elif kernel in ("triangular", "uniform", "epanechnikov"):
         # compute the mask and cast to floating point
         mask = (u <= 1).to(u.dtype)
@@ -49,7 +49,7 @@ def histogram_batch(
         elif kernel == "uniform":
             kernel_values = torch.ones_like(u) * mask
         else:  # kernel == "epanechnikov"
-            kernel_values = (1.0 - u**2) * mask
+            kernel_values = (1.0 - u ** 2) * mask
     else:
         raise ValueError(f"Kernel must be 'triangular', 'gaussian', 'uniform' or 'epanechnikov'. Got {kernel}.")
     hist = torch.sum(kernel_values, dim=-1).permute(1, 0)
@@ -92,7 +92,7 @@ def histogram(
     # creates a (B x bins x (3 x H x W))-shape tensor
 
     if kernel == "gaussian":
-        kernel_values = torch.exp(-0.5 * u**2)
+        kernel_values = torch.exp(-0.5 * u ** 2)
     elif kernel in ("triangular", "uniform", "epanechnikov"):
         # compute the mask and cast to floating point
         mask = (u <= 1).to(u.dtype)
@@ -101,7 +101,7 @@ def histogram(
         elif kernel == "uniform":
             kernel_values = torch.ones_like(u) * mask
         else:  # kernel == "epanechnikov"
-            kernel_values = (1.0 - u**2) * mask
+            kernel_values = (1.0 - u ** 2) * mask
     else:
         raise ValueError(f"Kernel must be 'triangular', 'gaussian', 'uniform' or 'epanechnikov'. Got {kernel}.")
 
@@ -162,17 +162,17 @@ class SIMLoss(nn.Module):
 
 
 class ThetaLoss(nn.Module):
-    def __init__(self, eps=1, device=torch.device('cuda'), **kwargs):
+    def __init__(self, eps=1, invert=False, **kwargs):
         super().__init__()
-        self.eps = eps
-        self.device = device
-        self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=self.device)
+        self.invert = -1 if invert else 1
+        self.eps = eps * self.invert
         self.loss_fn = nn.MSELoss()
 
     def forward(self, theta, **args):
+        identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=theta[0].get_device())
         loss = 0
         for t in theta:
-            loss = loss + self.loss_fn(t, self.identity)
+            loss = loss + self.loss_fn(t, identity)
         return self.eps * loss
 
 
@@ -180,6 +180,7 @@ class GridLoss(nn.Module):
     """
     Actually not needed. It is the same as the ThetaLoss.
     """
+
     def __init__(self, device=torch.device('cuda'), **kwargs):
         super().__init__()
         self.identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=device)

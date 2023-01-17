@@ -130,18 +130,14 @@ def eval_linear(args):
         if epoch % args.val_freq == 0 or epoch == args.epochs - 1:
             test_stats = validate_network(args, val_loader, model, linear_classifier, args.n_last_blocks,
                                           args.avgpool_patchtokens)
-            print(
-                f"Accuracy at epoch {epoch} of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-            if args.save_best_acc:
-                best_acc = max(best_acc, test_stats["acc1"])
-            else:
-                best_acc = test_stats["acc1"]
+            print(f"Accuracy at epoch {epoch} of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+            best_acc = max(best_acc, test_stats["acc1"])
             print(f'Max accuracy so far: {best_acc:.2f}%')
             log_stats = {**{k: v for k, v in log_stats.items()},
                          **{f'test_{k}': v for k, v in test_stats.items()}}
             writer.add_scalar(tag="acc1@epoch", scalar_value=test_stats["acc1"], global_step=epoch)
             writer.add_scalar(tag="acc5@epoch", scalar_value=test_stats["acc5"], global_step=epoch)
-            writer.add_scalar(tag="best acc1", scalar_value=best_acc, global_step=epoch)
+            writer.add_scalar(tag="best-acc", scalar_value=best_acc, global_step=epoch)
         with (Path(args.output_dir) / "log.txt").open("a") as f:
             f.write(json.dumps(log_stats) + "\n")
         save_dict = {
@@ -305,6 +301,7 @@ def load_transforms(dataset: str):
         ])
     return train, val
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Evaluation with linear classification on ImageNet')
     parser.add_argument('--n_last_blocks', default=4, type=int, help="""Concatenate [CLS] tokens
@@ -334,8 +331,6 @@ if __name__ == '__main__':
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
     parser.add_argument('--evaluate', dest='evaluate', default=False, type=utils.bool_flag,
                         help='evaluate model on validation set')
-    parser.add_argument("--save_best_acc", default=True, type=utils.bool_flag,
-                        help="Set this flag to take the best test performance - Default by the DINO implementation.")
     parser.add_argument("--world_size", default=8, type=int,
                         help="actually not needed here -- just for avoiding unrecognized arguments error")
     parser.add_argument("--gpu", default=8, type=int,

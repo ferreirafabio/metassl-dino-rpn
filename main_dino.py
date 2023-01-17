@@ -444,8 +444,7 @@ def train_dino(args):
         # ============ training one epoch of DINO ... ============
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss,
                                       data_loader, optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule,
-                                      momentum_schedule,
-                                      epoch, fp16_scaler, stn, use_pretrained_stn, args, summary_writer)
+                                      momentum_schedule, epoch, fp16_scaler, stn, use_pretrained_stn, args, summary_writer)
 
         # ============ writing logs ... ============
         save_dict = {
