@@ -35,13 +35,10 @@ import torch
 from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
-from torchvision import datasets, transforms
+from torchvision import datasets
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
-from torchvision.transforms import InterpolationMode
 from typing import Any, List, Union, Type
 from torch.utils.tensorboard import SummaryWriter
-from timm.data import create_transform
-from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
@@ -953,7 +950,7 @@ class SummaryWriterCustom(SummaryWriter):
         self.writer.close()
 
 
-def build_dataset(is_train, transform, args):
+def build_dataset(is_train, args, transform):
     # transform = build_transform(is_train, args)
     if args.dataset == 'CIFAR10':
         return datasets.CIFAR10(args.data_path, download=True, train=is_train, transform=transform)
