@@ -194,18 +194,7 @@ class STN(nn.Module):
         self.global_crops_scale = global_crops_scale
         self.local_crops_scale = local_crops_scale
 
-        self.gmin_scale = math.pow(self.global_crops_scale[0], .25)
-        # self.gmax_scale = math.pow(self.global_crops_scale[1], .25)
-        self.gmin_txy = self.gmin_scale - 1
-        self.gmax_txy = 1 - self.gmin_scale
-
-        self.lmin_scale = math.pow(self.local_crops_scale[0], .25)
-        self.lmax_scale = math.pow(self.local_crops_scale[1], .25)
-        self.lmin_txy = 1 - self.lmin_scale
-        self.lmax_txy = 1 - self.lmax_scale
-
-        assert len(
-            resolution) < 3, f"resolution parameter should be of length 1 or 2, but {len(resolution)} with {resolution} is given."
+        assert len(resolution) < 3, f"resolution parameter should be of length 1 or 2, but {len(resolution)} with {resolution} is given."
         if len(resolution) == 1:
             self.global_res = self.local_res = resolution[0]
         else:
@@ -220,6 +209,16 @@ class STN(nn.Module):
         # Spatial transformer localization-network
         self.localization_net = LocNet(self.mode, self.invert_gradients, self.total_crops_number,
                                        self.separate_localization_net, self.conv1_depth, self.conv2_depth, self.avgpool)
+
+        self.gmin_scale = math.pow(self.global_crops_scale[0], .25)
+        self.gmax_scale = math.pow(self.global_crops_scale[1], .25)
+        self.gmin_txy = self.gmin_scale - 1
+        self.gmax_txy = 1 - self.gmin_scale
+
+        self.lmin_scale = math.pow(self.local_crops_scale[0], .25)
+        self.lmax_scale = math.pow(self.local_crops_scale[1], .25)
+        self.lmin_txy = 1 - self.lmax_scale
+        self.lmax_txy = 1 - self.lmin_scale
 
     def _get_stn_mode_theta(self, theta, x, crop_mode: str = 'global'):
         if self.mode == 'affine':
@@ -240,16 +239,22 @@ class STN(nn.Module):
                 theta_new[:, 1, 1] = torch.cos(angle)
             elif self.mode == "scaled_translation":
                 if crop_mode == 'global':
-                    scale = theta[:, 0].clamp(self.gmin_scale, 1).view(-1, 1, 1)
-                    tx = theta[:, 1].clamp(self.gmin_txy, self.gmax_txy)
-                    ty = theta[:, 2].clamp(self.gmin_txy, self.gmax_txy)
+                    scale = theta[:, 0].clamp(self.gmin_scale, self.gmax_scale).view(-1, 1, 1)
+                    # scale = clamp2(theta[:, 0], self.gmin_scale, self.gmax_scale).view(-1, 1, 1)
+                    txy = theta[:, 1:].clamp(-self.gmax_txy, self.gmax_txy)
+                    # tx = theta[:, 1].clamp(-self.gmax_txy, self.gmax_txy)
+                    # ty = theta[:, 2].clamp(-self.gmax_txy, self.gmax_txy)
                 else:
-                    scale = theta[:, 0].clamp(self.lmin_scale, self.lmax_scale).view(-1, 1, 1)
-                    tx = clamp2(theta[:, 1], self.lmin_txy, self.lmax_txy)
-                    ty = clamp2(theta[:, 2], self.lmin_txy, self.lmax_txy)
+                    scale = theta[:, 0].clamp(self.lmin_scale, self.lmax_scale).view(-1, 1, 1)  # simpler version that does not allow horizontal and vertical flipping
+                    txy = theta[:, 1:].clamp(-self.lmax_txy, self.lmax_txy)
+                    # scale = clamp2(theta[:, 0], self.lmin_scale, self.lmax_scale).view(-1, 1, 1)
+                    # txy = clamp2(theta[:, 1:], self.lmin_txy, self.lmax_txy)  # oneliner
+                    # tx = clamp2(theta[:, 1], self.lmin_txy, self.lmax_txy)
+                    # ty = clamp2(theta[:, 2], self.lmin_txy, self.lmax_txy)
                 theta_new = theta_new * scale
-                theta_new[:, 0, 2] = tx
-                theta_new[:, 1, 2] = ty
+                theta_new[:, :, 2] = txy
+                # theta_new[:, 0, 2] = tx
+                # theta_new[:, 1, 2] = ty
         return theta_new
 
     def forward(self, x):
@@ -257,7 +262,7 @@ class STN(nn.Module):
 
         # 2 because of 2 global crops/views
         thetas = [self._get_stn_mode_theta(params, x, 'global') for params in theta_params[:2]] + \
-            [self._get_stn_mode_theta(params, x, 'local') for params in theta_params[2:]]
+                 [self._get_stn_mode_theta(params, x, 'local') for params in theta_params[2:]]
 
         if self.theta_norm:
             thetas = [theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True).clamp(min=1) for theta in thetas]
@@ -267,14 +272,15 @@ class STN(nn.Module):
         self.affine_matrix_l1 = thetas[2].cpu().detach().numpy()
         self.affine_matrix_l2 = thetas[3].cpu().detach().numpy()
 
+        align_corners = True
         crops = []
         for theta in thetas[:2]:
-            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.global_res, self.global_res], align_corners=True)
-            crop = F.grid_sample(x, grid, align_corners=True)
+            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.global_res, self.global_res], align_corners=align_corners)
+            crop = F.grid_sample(x, grid, align_corners=align_corners)
             crops.append(crop)
         for theta in thetas[2:]:
-            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.local_res, self.local_res], align_corners=True)
-            crop = F.grid_sample(x, grid, align_corners=True)
+            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.local_res, self.local_res], align_corners=align_corners)
+            crop = F.grid_sample(x, grid, align_corners=align_corners)
             crops.append(crop)
 
         return crops, thetas

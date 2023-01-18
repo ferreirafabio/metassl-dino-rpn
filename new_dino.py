@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import copy
 import datetime
 import json
 import math
@@ -26,14 +25,14 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import datasets, transforms
+from torchvision import transforms
 from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
 from penalty_losses import HISTLoss, SIMLoss, ThetaLoss
 from rrc_stn import AugmentationNetwork, STN
-from utils import custom_collate, SummaryWriterCustom
+from utils import SummaryWriterCustom
 from vision_transformer import DINOHead
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
@@ -576,8 +575,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             m = momentum_schedule[it]  # momentum parameter
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-
-        del images
 
         # logging
         torch.cuda.synchronize()

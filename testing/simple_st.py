@@ -11,10 +11,8 @@ cifar = datasets.CIFAR10(data_path)
 
 image, _ = cifar.__getitem__(0)
 
-theta = torch.tensor([[[-1, 0, 0],
-                       [0, 1, 0]]],
-                     dtype=torch.float)
-align = False
+theta = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float)
+align = True
 angle = torch.tensor(torch.pi/4)
 scale = 1
 scale2 = 1
@@ -26,7 +24,7 @@ thetangle = torch.tensor([[
     [torch.sin(angle), scale*torch.cos(angle), 0]
 ]])
 
-theta = theta
+theta = ident
 img = toT(image).unsqueeze(0)
 print(theta)
 
@@ -39,9 +37,13 @@ out1 = F.grid_sample(img, grid1, align_corners=align)
 
 theta2 = theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True)
 print(f"{theta2=}")
-grid2 = F.affine_grid(theta2, size=img.shape, align_corners=align)
-out2 = F.grid_sample(img, grid2, align_corners=align)
-
+grid2 = F.affine_grid(theta2, size=img.shape, align_corners=False)
+out2 = F.grid_sample(img, grid2, align_corners=False)
+print(grid2[0, 0, 0, :])
+print(grid2[0, 0, -1, :])
+print(grid2[0, -1, 0, :])
+print(grid2[0, -1, -1, :])
+print(img.sum() == out2.sum())
 theta3 = theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True).clamp(min=1)
 grid3 = F.affine_grid(theta3, size=img.shape, align_corners=align)
 out3 = F.grid_sample(img, grid3, align_corners=align)
