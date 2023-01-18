@@ -76,7 +76,6 @@ class LocalizationNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
 
     def forward(self, x):
-
         xs = self.maxpool2d(F.leaky_relu(self.conv2d_bn1(self.conv2d_1(x))))
 
         if self.deep:
@@ -101,15 +100,13 @@ class LocHead(nn.Module):
         self.linear2 = nn.Linear(64, self.stn_n_params)
 
     def forward(self, x):
-
         xs = torch.flatten(x, 1)
         xs = F.leaky_relu(self.linear0(xs))
         xs = F.leaky_relu(self.linear1(xs))
+        xs = self.linear2(xs)
 
         if self.invert_stn_gradients:
-            xs = grad_reverse(self.linear2(xs))
-        else:
-            xs = self.linear2(xs)
+            xs = grad_reverse(xs)
 
         return xs
 

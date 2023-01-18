@@ -11,8 +11,8 @@ cifar = datasets.CIFAR10(data_path)
 
 image, _ = cifar.__getitem__(0)
 
-theta = torch.tensor([[[1, 0, .1],
-                       [0, 1, 0.1]]],
+theta = torch.tensor([[[-1, 0, 0],
+                       [0, 1, 0]]],
                      dtype=torch.float)
 align = False
 angle = torch.tensor(torch.pi/4)
@@ -26,7 +26,7 @@ thetangle = torch.tensor([[
     [torch.sin(angle), scale*torch.cos(angle), 0]
 ]])
 
-theta = ident * 1.5
+theta = theta
 img = toT(image).unsqueeze(0)
 print(theta)
 

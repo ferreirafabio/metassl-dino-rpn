@@ -506,7 +506,7 @@ def init_distributed_mode(args):
         sys.exit(1)
 
     dist.init_process_group(
-        backend="nccl",
+        backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
@@ -970,3 +970,13 @@ def load_dataset(name, path, transform):
 
     print(f"Does not support dataset: {name}")
     sys.exit(1)
+
+
+def calc_area_of_grid(grid: torch.Tensor):
+    """
+    Simplified calculation of the resulting area of an affine transformation matrix.
+    Assumes a rectangle. Takes three points, calculates the distance of the points, two sides are taken to for the area.
+    """
+    a = torch.pow((grid[0, 0, 0, :] - grid[0, 0, -1, :]) / 2, 2).sum().sqrt()
+    b = torch.pow((grid[0, 0, 0, :] - grid[0, -1, 0, :]) / 2, 2).sum().sqrt()
+    print(a*b)
