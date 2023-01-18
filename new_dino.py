@@ -138,8 +138,6 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
-    parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
-    parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
     parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
                         help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
@@ -219,7 +217,7 @@ def train_dino(args):
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
-        collate_fn=custom_collate,
+        # collate_fn=custom_collate,
     )
 
     print(f"Data loaded: there are {len(dataset)} images.")
@@ -255,7 +253,8 @@ def train_dino(args):
                         conv1_depth=args.stn_conv1_depth,
                         conv2_depth=args.stn_conv2_depth,
                         resize_input=args.resize_input,
-                        theta_norm=args.stn_theta_norm,)
+                        theta_norm=args.stn_theta_norm,
+                        local_crops_number=args.local_crops_number)
     stn = AugmentationNetwork(transform_net=transform_net)
 
     # multi-crop wrapper handles forward with inputs of different resolutions
@@ -469,10 +468,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
-        # print(f"rank {torch.distributed.get_rank()}: image shape before stn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
-
-        if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
-            uncropped_images = copy.deepcopy(images)
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
@@ -482,7 +477,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
                 penalty = sim_loss(images=stn_images, theta=theta, target=images)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
-                summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
+                summary_writer.write_image_grid(tag="images", images=stn_images, original_images=images,
                                                 epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_g1", theta=stn.module.transform_net.affine_matrix_g1,
                                                    epoch=epoch, global_step=it)

@@ -26,7 +26,7 @@ IDENT_TENSORS = {
     'scale': [1],
     'scaled_rotation': [1, 0],
     'scaled_rotation_translation': [1, 0, 0, 0],
-    'scaled_translation': [0, 1, -1],
+    'scaled_translation': [1, 0, 0],
     'shear': [1, 1],
     'translation': [0, 0],
 }
@@ -51,17 +51,33 @@ def grad_reverse(x, scale=1.0):
 
 
 class Clamp2(torch.autograd.Function):
-
+    """
+    Clamps the given tensor in the given range on both sides of zero (negative and positive).
+    Given values:
+        min_val = 0.5
+        max_val = 1
+        tensor = [-2, -1, -0.75, -0.25, 0?, 0.25, 0.75, 1, 2]
+    Result -> [-1, -1, -0.75, -0.5, -0.5?0?0.5, 0.5, 0.75, 1, 1]
+    """
     @staticmethod
     def forward(ctx, x, min_val, max_val):
-        ctx.save_for_backward(x)
+        # ctx.save_for_backward(x)
+        # TODO: at the moment 0 is always assigned to the positive range, before it was 0 because of sign
+        # But the clamping assigned the min_val, but sign(0) = 0, min_val * 0 = 0
+        # Another solution could be to add a small value, like 0.00001 to theta
+        sign = x.sign()
+        sign[sign == 0] = 1
         ctx._mask = (x.abs().ge(min_val) * x.abs().le(max_val))
-        return x.abs().clamp(min_val, max_val) * x.sign()
+        # return x.abs().clamp(min_val, max_val) * x.sign()
+        return x.abs().clamp(min_val, max_val) * sign
 
     def backward(ctx, grad_output):
         mask = Variable(ctx._mask.type_as(grad_output.data))
-        x, = ctx.saved_variables
-        return grad_output * mask * x.sign(), None, None
+        # x, = ctx.saved_variables
+        # Not sure whether x.sign() is needed here
+        # I dont think so, because we keep the sign before clamping in the forward pass
+        # return grad_output * mask * x.sign(), None, None
+        return grad_output * mask, None, None
 
 
 def clamp2(x, min_val, max_val):
@@ -185,8 +201,8 @@ class STN(nn.Module):
 
         self.lmin_scale = math.pow(self.local_crops_scale[0], .25)
         self.lmax_scale = math.pow(self.local_crops_scale[1], .25)
-        self.lmin_txy = 1 - self.lmax_scale
-        self.lmax_txy = 1 - self.lmin_scale
+        self.lmin_txy = 1 - self.lmin_scale
+        self.lmax_txy = 1 - self.lmax_scale
 
         assert len(
             resolution) < 3, f"resolution parameter should be of length 1 or 2, but {len(resolution)} with {resolution} is given."
@@ -200,8 +216,9 @@ class STN(nn.Module):
         self.affine_matrix_l1 = None
         self.affine_matrix_l2 = None
 
+        self.total_crops_number = 2 + self.local_crops_number
         # Spatial transformer localization-network
-        self.localization_net = LocNet(self.mode, self.invert_gradients, 2 + self.local_crops_number,
+        self.localization_net = LocNet(self.mode, self.invert_gradients, self.total_crops_number,
                                        self.separate_localization_net, self.conv1_depth, self.conv2_depth, self.avgpool)
 
     def _get_stn_mode_theta(self, theta, x, crop_mode: str = 'global'):
@@ -238,6 +255,7 @@ class STN(nn.Module):
     def forward(self, x):
         theta_params = self.localization_net(x)
 
+        # 2 because of 2 global crops/views
         thetas = [self._get_stn_mode_theta(params, x, 'global') for params in theta_params[:2]] + \
             [self._get_stn_mode_theta(params, x, 'local') for params in theta_params[2:]]
 
@@ -251,12 +269,12 @@ class STN(nn.Module):
 
         crops = []
         for theta in thetas[:2]:
-            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.global_res, self.global_res])
-            crop = F.grid_sample(x, grid)
+            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.global_res, self.global_res], align_corners=True)
+            crop = F.grid_sample(x, grid, align_corners=True)
             crops.append(crop)
         for theta in thetas[2:]:
-            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.local_res, self.local_res])
-            crop = F.grid_sample(x, grid)
+            grid = F.affine_grid(theta, size=list(x.size()[:2]) + [self.local_res, self.local_res], align_corners=True)
+            crop = F.grid_sample(x, grid, align_corners=True)
             crops.append(crop)
 
         return crops, thetas
@@ -302,5 +320,6 @@ class AugmentationNetwork(nn.Module):
             return [global_views1, global_views2, local_views1, local_views2], []
 
         else:
-            imgs = torch.stack(imgs, dim=0)
+            if isinstance(imgs, list):
+                imgs = torch.stack(imgs, dim=0)
             return self.transform_net(imgs)
