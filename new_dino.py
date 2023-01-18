@@ -127,8 +127,8 @@ def get_args_parser():
         Used for small local view cropping of multi-crop.""")
 
     # Misc
-    parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10"],
-                        help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10")
+    parser.add_argument("--dataset", default="ImageNet", type=str, choices=["ImageNet", "CIFAR10", "CIFAR100"],
+                        help="Specify the name of your dataset. Choose from: ImageNet, CIFAR10, CIFAR100")
     parser.add_argument('--data_path', default='/path/to/dataset/train/', type=str,
                         help='Please specify path to the training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
@@ -208,7 +208,7 @@ def train_dino(args):
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = utils.build_dataset(True, args, transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
