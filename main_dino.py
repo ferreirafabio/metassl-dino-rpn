@@ -337,6 +337,7 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
             p.requires_grad = False
     
     if args.stn_color_augment:
+        assert args.local_crops_number == 2, "STN currently only supports local_crops_number=2"
         assert use_pretrained_rpn, "if color augmentations are used, STN must be trained already and its weights must be given since gradients won't flow through color augs."
 
     if not args.use_rpn_optimizer and not use_pretrained_rpn:
