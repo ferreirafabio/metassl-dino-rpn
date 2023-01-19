@@ -159,6 +159,8 @@ def get_args_parser():
     parser.add_argument("--rpn_conv2_depth", default=32, type=int, help="Specifies the number of feature maps of conv2 for the RPN localization network (default: 32).")
     parser.add_argument("--resize_all_inputs", default=False, type=utils.bool_flag, help="Specifies whether all inputs should be resized to have the same resolution. When set to true, the RPN will be trained batch-wise. Only has an effect when training on ImageNet.")
     parser.add_argument("--stn_theta_norm", default=False, type=utils.bool_flag, help="Set this flag to normalize 'theta' in the STN before passing it to affine_grid(theta, ...). Fixes the problem with cropping of the images (black regions)")
+    parser.add_argument("--stn_color_augment", default=False, type=utils.bool_flag, help="todo")
+
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
     
@@ -182,7 +184,7 @@ def dino_neps_main(working_directory, previous_working_directory, args, **hyperp
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = '29500'
     # os.environ["MASTER_PORT"] = str(find_free_port())
-    
+
     os.environ["WORLD_SIZE"] = str(args.world_size)
     train_dino(None, args.output_dir, args.output_dir, args)
         
@@ -334,6 +336,9 @@ def train_dino(rank, working_directory, previous_working_directory, args, hyperp
         for p in rpn.parameters():
             p.requires_grad = False
     
+    if args.stn_color_augment:
+        assert use_pretrained_rpn, "if color augmentations are used, STN must be trained already and its weights must be given since gradients won't flow through color augs."
+
     if not args.use_rpn_optimizer and not use_pretrained_rpn:
         # add to regularized param group
         # student_params = params_groups[0]['params']
@@ -497,6 +502,40 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             # print(images[1].size())
             # print(images[2].size())
             # print(images[3].size())
+
+            if args.stn_color_augment:
+                color_jitter = transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
+                gaussian_blur = transforms.GaussianBlur(1, (0.1, 2.0))
+                transform_global1 = transforms.Compose([
+                                                transforms.RandomApply([color_jitter], p=0.8),
+                                                transforms.RandomGrayscale(p=0.2),
+                                                transforms.RandomApply([gaussian_blur], p=1.0),
+                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                                transforms.ConvertImageDtype(torch.float32),
+                                                # transforms.ToTensor(),
+                                                ])
+                
+                transform_global2 = transforms.Compose([
+                                                transforms.RandomApply([color_jitter], p=0.8),
+                                                transforms.RandomGrayscale(p=0.2),
+                                                transforms.RandomApply([gaussian_blur], p=0.1),
+                                                transforms.RandomSolarize(1, p=0.2), # img is already normalized as input to STN; bound = 1 if img.is_floating_point() else 255
+                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                                transforms.ConvertImageDtype(torch.float32),
+                                                ])
+
+                transform_local = transforms.Compose([
+                                transforms.RandomApply([color_jitter], p=0.8),
+                                transforms.RandomGrayscale(p=0.2),
+                                transforms.RandomApply([gaussian_blur], p=0.5),
+                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                transforms.ConvertImageDtype(torch.float32),
+                                ])
+
+                images[0] = transform_global1(images[0])
+                images[1] = transform_global2(images[1])
+                images[2:] = [transform_local(img) for img in images[2:]]
+
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=images, original_images=uncropped_images, epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_g1", theta=rpn.module.transform_net.affine_matrix_g1, epoch=epoch, global_step=it)
