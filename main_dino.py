@@ -31,7 +31,7 @@ from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
-from penalty_losses import HISTLoss, SIMLoss, ThetaLoss
+from penalty_losses import HISTLoss, SIMLoss, ThetaLoss, ThetaCropsPenalty
 from stn import AugmentationNetwork, STN
 from utils import custom_collate, SummaryWriterCustom
 from vision_transformer import DINOHead
@@ -44,6 +44,7 @@ penalty_dict = {
     "simloss": SIMLoss,
     "histloss": HISTLoss,
     "thetaloss": ThetaLoss,
+    "thetacropspenalty": ThetaCropsPenalty,
 }
 
 
@@ -502,7 +503,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             stn_images, theta = stn(images)
             penalty = 0
             if args.use_stn_penalty:
-                penalty = sim_loss(images=stn_images, theta=theta, target=images)
+                if args.penalty_loss == 'thetacropspenalty':
+                    for t in theta[:2]:
+                        penalty = penalty + sim_loss(theta=t, crops_scale=args.global_crops_scale)
+                    for t in theta[2:]:
+                        penalty = penalty + sim_loss(theta=t, crops_scale=args.local_crops_scale)
+                else:
+                    penalty = sim_loss(images=stn_images, theta=theta, target=images)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
@@ -530,7 +537,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
             student_output = student(stn_images)
-            loss = dino_loss(student_output, teacher_output, epoch) + penalty
+            dloss = dino_loss(student_output, teacher_output, epoch)
+            loss = dloss + penalty
 
             if torch.distributed.get_rank() == 0:
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
@@ -610,6 +618,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
         # logging
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
+        metric_logger.update(dino=dloss.item())
+        metric_logger.update(penalty=penalty.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         if args.use_stn_optimizer and not use_pretrained_stn:
             metric_logger.update(lrstn=stn_optimizer.param_groups[0]["lr"])

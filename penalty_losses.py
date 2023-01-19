@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -194,3 +195,22 @@ class GridLoss(nn.Module):
             grid_identity = F.affine_grid(identity, size)
             loss = loss + self.loss_fn(g, grid_identity)
         return loss
+
+
+class ThetaCropsPenalty(nn.Module):
+    def __init__(self, invert: bool, eps: float = 1., loss_fn=nn.L1Loss, **kwargs):
+        super().__init__()
+        self.invert = -1 if invert else 1
+        self.eps = eps
+        self.loss_fn = loss_fn()
+
+    def forward(self, theta, crops_scale):
+        low = math.pow(crops_scale[0], 0.25)
+        high = math.pow(crops_scale[1], 0.25)
+        # mid = (low + high) / 2
+        # sample uniformly in range [low, high]
+        target = (low - high) * torch.rand(1, device=theta.get_device()) + high
+        det = torch.det(theta[:, :, :2].abs().float())
+        txy = (1 - (theta[:, :, 2].abs() / 2)).prod(dim=1, keepdims=True)
+        loss = self.loss_fn(det, target) + self.loss_fn(txy, target)
+        return self.invert * loss
