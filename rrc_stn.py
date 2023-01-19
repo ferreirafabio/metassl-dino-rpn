@@ -255,7 +255,37 @@ class STN(nn.Module):
                 theta_new[:, :, 2] = txy
                 # theta_new[:, 0, 2] = tx
                 # theta_new[:, 1, 2] = ty
+            elif self.mode == "rotation_translation":
+                angle = theta[:, 0]
+                theta_new[:, 0, 0] = torch.cos(angle)
+                theta_new[:, 0, 1] = -torch.sin(angle)
+                theta_new[:, 1, 0] = torch.sin(angle)
+                theta_new[:, 1, 1] = torch.cos(angle)
+                if crop_mode == 'global':
+                    txy = theta[:, 1:].clamp(-self.gmax_txy, self.gmax_txy)
+                else:
+                    txy = theta[:, 1:].clamp(-self.lmax_txy, self.lmax_txy)
+                theta_new[:, :, 2] = txy
         return theta_new
+
+    def _get_theta(self, theta, x, local=False):
+        min_scale = self.lmin_scale if local else self.gmin_scale
+        max_scale = self.lmax_scale if local else self.gmax_scale
+        min_t_value = -self.lmax_txy if local else -self.gmax_txy
+        max_t_value = self.lmax_txy if local else self.gmax_txy
+        if self.mode == 'affine':
+            theta = theta.clone()
+            theta = theta.view(-1, 2, 3)
+            theta[:, :, 2] = theta[:, :, 2].clamp(min_t_value, max_t_value)
+            det = torch.det(theta[:, :, :2])
+            mask = det.abs().ge(min_scale) * det.abs().le(max_scale)
+            c = ((max_scale + min_scale) / 2 / det).sqrt() * mask.neg().float()
+            theta[:, :, :2] = c * theta[:, :, :2]
+            return theta
+        theta_new = torch.zeros([x.size(0), 2, 3], dtype=torch.float32, device=x.get_device(), requires_grad=True)
+        theta_new = theta_new + 0
+        theta_new[:, 0, 0] = 1.0
+        theta_new[:, 1, 1] = 1.0
 
     def forward(self, x):
         theta_params = self.localization_net(x)
