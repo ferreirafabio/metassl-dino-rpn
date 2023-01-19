@@ -215,7 +215,7 @@ def train_dino(args):
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = utils.build_dataset(True, args, transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -224,7 +224,7 @@ def train_dino(args):
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
-        collate_fn=custom_collate,
+        # collate_fn=custom_collate,
     )
 
     print(f"Data loaded: there are {len(dataset)} images.")
@@ -476,7 +476,7 @@ def train_dino(args):
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, data_loader,
                     optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule, momentum_schedule, epoch,
                     fp16_scaler, stn, use_pretrained_stn, args, summary_writer):
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = utils.MetricLogger(delimiter=" ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):

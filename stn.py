@@ -473,5 +473,6 @@ class AugmentationNetwork(nn.Module):
             return [global_views1, global_views2, local_views1, local_views2], []
 
         else:
-            imgs = torch.stack(imgs, dim=0)
+            if isinstance(imgs, list):
+                imgs = torch.stack(imgs, dim=0)
             return self.transform_net(imgs)
