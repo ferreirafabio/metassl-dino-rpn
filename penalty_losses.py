@@ -205,12 +205,15 @@ class ThetaCropsPenalty(nn.Module):
         self.loss_fn = loss_fn()
 
     def forward(self, theta, crops_scale):
-        low = math.pow(crops_scale[0], 0.5)
-        high = math.pow(crops_scale[1], 0.5)
-        # mid = (low + high) / 2
+        a, b = crops_scale
+        low = math.pow(a, 0.5)
+        high = math.pow(b, 0.5)
+        # targetd = (a + b) / 2
+        # targett = (low + high) / 2
         # sample uniformly in range [low, high]
-        target = (low - high) * torch.rand(1, device=theta.get_device()) + high
+        targetd = (b - a) * torch.rand(1, device=theta.get_device()) + a
+        targett = (high - low) * torch.rand(1, device=theta.get_device()) + low
         det = torch.det(theta[:, :, :2].float()).abs()
-        txy = (1 - (theta[:, :, 2] / 2)).prod(dim=1, keepdims=True)
-        loss = self.loss_fn(det, target) + self.loss_fn(txy, target)
+        txy = (1 - (theta[:, :, 2].abs() / 2)).prod(dim=1, keepdims=True)
+        loss = self.loss_fn(det, targetd) + self.loss_fn(txy, targett)
         return self.invert * self.eps * loss
