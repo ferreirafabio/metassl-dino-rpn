@@ -327,13 +327,6 @@ def train_dino(args):
         min_res = min(min_res, args.one_res)
     sim_loss = None
     if args.use_stn_penalty:
-        # argz = {
-        #     'invert': args.invert_penalty,
-        #     'min_sim': args.min_sim_pen,
-        #     'resolution': 32,
-        #     'exponent': 2,
-        #     'bins': 100,
-        # }
         Loss = penalty_dict[args.penalty_loss]
         sim_loss = Loss(
             invert=args.invert_penalty,
@@ -493,15 +486,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         # move images to gpu
         images = [im.cuda(non_blocking=True) for im in images]
-        # print(f"rank {torch.distributed.get_rank()}: image shape before stn: {len(images)} (batch size), {images[0].shape} (shape 1st image), {images[1].shape} (shape 2nd image)")
-
-        if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
-            uncropped_images = copy.deepcopy(images)
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             stn_images, theta = stn(images)
-            penalty = 0
+            penalty = torch.zeros(1, dtype=torch.float).cuda()
             if args.use_stn_penalty:
                 if args.penalty_loss == 'thetacropspenalty':
                     for t in theta[:2]:
@@ -512,7 +501,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
                     penalty = sim_loss(images=stn_images, theta=theta, target=images)
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
-                summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,
+                summary_writer.write_image_grid(tag="images", images=stn_images, original_images=images,
                                                 epoch=epoch, global_step=it)
                 summary_writer.write_theta_heatmap(tag="theta_g1", theta=stn.module.transform_net.affine_matrix_g1,
                                                    epoch=epoch, global_step=it)
@@ -532,8 +521,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
                 summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm,
                                             global_step=it)
 
-                uncropped_images = None
-
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
             student_output = student(stn_images)
@@ -541,7 +528,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             loss = dloss + penalty
 
             if torch.distributed.get_rank() == 0:
+                summary_writer.write_scalar(tag="dino_loss", scalar_value=dloss.item(), global_step=it)
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
+                summary_writer.write_scalar(tag="penalty", scalar_value=penalty.item(), global_step=it)
                 summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
                 if args.use_stn_optimizer and not use_pretrained_stn:
                     summary_writer.write_scalar(tag="lr stn", scalar_value=stn_optimizer.param_groups[0]["lr"],
@@ -612,8 +601,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             m = momentum_schedule[it]  # momentum parameter
             for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-
-        del images
 
         # logging
         torch.cuda.synchronize()
