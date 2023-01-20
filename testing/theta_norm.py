@@ -24,32 +24,33 @@ def plot(imgs, **imshow_kwargs):
     plt.tight_layout()
 
 
-data_path = "../../datasets/CIFAR10"
-cifar = datasets.CIFAR10(data_path)
-toTensor = transforms.ToTensor()
-toPIL = transforms.ToPILImage()
+if __name__ == "__main__":
+    data_path = "../../datasets/CIFAR10"
+    cifar = datasets.CIFAR10(data_path)
+    toTensor = transforms.ToTensor()
+    toPIL = transforms.ToPILImage()
 
-# theta = torch.tensor([[[-1.5, 0.25, 0.], [0.5, 1.5, 0.]]],)
-theta = torch.randn(1, 2, 3)
+    # theta = torch.tensor([[[-1.5, 0.25, 0.], [0.5, 1.5, 0.]]],)
+    theta = torch.randn(1, 2, 3)
 
-x = cifar.__getitem__(torch.randint(50000, (1,)).item())[0]
-x = toTensor(x).unsqueeze(0)
-grid = F.affine_grid(theta, x.size(), align_corners=True)
-a = F.grid_sample(x, grid, align_corners=True)
+    x = cifar.__getitem__(torch.randint(50000, (1,)).item())[0]
+    x = toTensor(x).unsqueeze(0)
+    grid = F.affine_grid(theta, x.size(), align_corners=True)
+    a = F.grid_sample(x, grid, align_corners=True)
 
-theta_tanh = torch.tanh(theta)
-grid = F.affine_grid(theta_tanh, x.size(), align_corners=True)
-b = F.grid_sample(x, grid, align_corners=True)
+    theta_tanh = torch.tanh(theta)
+    grid = F.affine_grid(theta_tanh, x.size(), align_corners=True)
+    b = F.grid_sample(x, grid, align_corners=True)
 
-theta_norm = theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True)
-grid = F.affine_grid(theta_norm, x.size(), align_corners=True)
-c = F.grid_sample(x, grid, align_corners=True)
+    theta_norm = theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True)
+    grid = F.affine_grid(theta_norm, x.size(), align_corners=True)
+    c = F.grid_sample(x, grid, align_corners=True)
 
-theta_all = theta_tanh / torch.linalg.norm(theta_tanh, ord=1, dim=2, keepdim=True)
-grid = F.affine_grid(theta_all, x.size(), align_corners=True)
-d = F.grid_sample(x, grid, align_corners=True)
+    theta_all = theta_tanh / torch.linalg.norm(theta_tanh, ord=1, dim=2, keepdim=True)
+    grid = F.affine_grid(theta_all, x.size(), align_corners=True)
+    d = F.grid_sample(x, grid, align_corners=True)
 
-images = [a, b, c, d]
-images = [toPIL(img.squeeze()) for img in images]
-plot(images)
-plt.show()
+    images = [a, b, c, d]
+    images = [toPIL(img.squeeze()) for img in images]
+    plot(images)
+    plt.show()
