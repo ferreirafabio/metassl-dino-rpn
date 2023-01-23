@@ -1,55 +1,59 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-import torchvision
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
-import numpy as np
+import utils
 
+if __name__ == "__main__":
+    toTensor = transforms.ToTensor()
+    toPIL = transforms.ToPILImage()
 
-def plot(imgs, **imshow_kwargs):
-    if not isinstance(imgs[0], list):
-        # Make a 2d grid even if there's just 1 row
-        imgs = [imgs]
+    data_path = "../../datasets/CIFAR10"
+    cifar = datasets.CIFAR10(data_path)
+    images = []
 
-    num_rows = len(imgs)
-    num_cols = len(imgs[0])
-    fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, squeeze=False)
-    for row_idx, row in enumerate(imgs):
-        for col_idx, img in enumerate(row):
-            ax = axs[row_idx, col_idx]
-            ax.imshow(np.asarray(img), **imshow_kwargs)
-            ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-    plt.tight_layout()
+    theta = torch.tensor([[[1, 0, 0.25],
+                           [0, 1, 0.25]]], dtype=torch.float)
+    angle = torch.tensor(torch.pi/4)
+    theta = torch.tensor([[[torch.cos(angle), -torch.sin(angle), 0.25],
+                           [torch.sin(angle), torch.cos(angle), 0.25]]])
 
+    x, _ = cifar.__getitem__(0)
+    images.append(x)
+    x = toTensor(x).unsqueeze(0)
 
-data_path = "../../datasets/CIFAR10"
-cifar = datasets.CIFAR10(data_path)
-toTensor = transforms.ToTensor()
-toPIL = transforms.ToPILImage()
+    grid = F.affine_grid(theta, x.size(), True)
+    out = F.grid_sample(x, grid, align_corners=True).squeeze()
+    images.append(toPIL(out))
 
-# theta = torch.tensor([[[-1.5, 0.25, 0.], [0.5, 1.5, 0.]]],)
-theta = torch.randn(1, 2, 3)
+    normed = torch.tanh(theta)
+    grid = F.affine_grid(normed, x.size())
+    out = F.grid_sample(x, grid, align_corners=True).squeeze()
+    images.append(toPIL(out))
 
-x = cifar.__getitem__(torch.randint(50000, (1,)).item())[0]
-x = toTensor(x).unsqueeze(0)
-grid = F.affine_grid(theta, x.size(), align_corners=True)
-a = F.grid_sample(x, grid, align_corners=True)
+    normed = theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True)
+    grid = F.affine_grid(normed, x.size(), align_corners=True)
+    out = F.grid_sample(x, grid, align_corners=True).squeeze()
+    images.append(toPIL(out))
 
-theta_tanh = torch.tanh(theta)
-grid = F.affine_grid(theta_tanh, x.size(), align_corners=True)
-b = F.grid_sample(x, grid, align_corners=True)
+    normed = theta / torch.linalg.norm(theta, ord=2, dim=2, keepdim=True)
+    grid = F.affine_grid(normed, x.size())
+    out = F.grid_sample(x, grid).squeeze()
+    images.append(toPIL(out))
 
-theta_norm = theta / torch.linalg.norm(theta, ord=1, dim=2, keepdim=True)
-grid = F.affine_grid(theta_norm, x.size(), align_corners=True)
-c = F.grid_sample(x, grid, align_corners=True)
+    labels = ['original', 'transformed', 'tanh', 'L1-norm', 'L2-norm']
+    utils.plot(images, labels=labels)
+    plt.show()
 
-theta_all = theta_tanh / torch.linalg.norm(theta_tanh, ord=1, dim=2, keepdim=True)
-grid = F.affine_grid(theta_all, x.size(), align_corners=True)
-d = F.grid_sample(x, grid, align_corners=True)
-
-images = [a, b, c, d]
-images = [toPIL(img.squeeze()) for img in images]
-plot(images)
-plt.show()
+    """
+    Other not working ideas
+    """
+    # # Create a mask to identify the black regions
+    # mask = (out != 0).any(dim=0)
+    # # Create the bounding box coordinates
+    # coords = torch.nonzero(mask)
+    # top_left = coords.min(dim=0)[0]
+    # bottom_right = coords.max(dim=0)[0]
+    # # Crop the image
+    # cropped_result = out[:, top_left[0]:bottom_right[0]+1, top_left[1]:bottom_right[1]+1]
+    # images.append(toPIL(cropped_result.squeeze()))

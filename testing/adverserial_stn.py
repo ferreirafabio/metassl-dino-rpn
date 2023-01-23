@@ -1,10 +1,15 @@
+import time
+
 import matplotlib.pyplot as plt
 
-from stn import STN
+# from stn import STN
+from rrc_stn import STN
 from penalty_losses import ThetaLoss
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import vision_transformer as vits
 
 toP = transforms.ToPILImage()
 toT = transforms.ToTensor()
@@ -25,25 +30,34 @@ if __name__ == "__main__":
         num_workers=2,
     )
 
-    model = STN().cuda()
-    criterion = ThetaLoss(invert=False).cuda()
+    model = STN(invert_gradients=True, mode='scaled_translation').cuda()
+    criterion = ThetaLoss(invert=True).cuda()
+    criterion2 = nn.CrossEntropyLoss().cuda()
+    vit = vits.vit_tiny(16).cuda()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
 
     losses = []
     for epoch in range(10):
         print("Starting epoch ", epoch + 1)
-        for batch, data in enumerate(loader):
-            img, _ = data
-            img = img.cuda()
-            _, theta = model(img)
+        start = time.time()
+        for batch, (images, targets) in enumerate(loader):
+            images = images.cuda()
+            targets = targets.cuda()
+            images, theta = model(images)
             loss = criterion(theta)
             losses.append(loss.item())
+
+            logits = vit(images[0])
+            loss2 = loss + criterion2(logits, targets)
             optimizer.zero_grad()
-            loss.backward()
+            loss2.backward()
             optimizer.step()
 
             if batch % 100 == 0:
+                end = time.time()
+                print("time:", end-start)
                 print("loss: ", loss.item())
+                start = time.time()
         print(theta[0][0])
 
     x = list(range(len(losses)))
