@@ -924,7 +924,7 @@ def image_grid(images, original_images, epoch, plot_size=16):
 def theta_heatmap(theta, epoch):
     figure, ax = plt.subplots()
     # figure.tight_layout()
-    sns.heatmap(theta[0], annot=True)
+    sns.heatmap(theta, annot=True)
     ax.set_title(f'Theta @ {epoch} epoch')
     return figure
 
@@ -962,6 +962,41 @@ def build_dataset(is_train, args, transform):
         return dataset
     print(f"Does not support dataset: {args.dataset}")
     sys.exit(1)
+
+
+def summary_writer_write(summary_writer, stn_images, images, thetas, epoch, it):
+    theta_g1 = thetas[0][0].cpu().detach().numpy()
+    theta_g2 = thetas[1][0].cpu().detach().numpy()
+    theta_l1 = thetas[2][0].cpu().detach().numpy()
+    theta_l2 = thetas[3][0].cpu().detach().numpy()
+    summary_writer.write_image_grid(tag="images", images=stn_images, original_images=images, epoch=epoch, global_step=it)
+    summary_writer.write_theta_heatmap(tag="theta_g1", theta=theta_g1, epoch=epoch, global_step=it)
+    summary_writer.write_theta_heatmap(tag="theta_g2", theta=theta_g2, epoch=epoch, global_step=it)
+    summary_writer.write_theta_heatmap(tag="theta_l1", theta=theta_l1, epoch=epoch, global_step=it)
+    summary_writer.write_theta_heatmap(tag="theta_l2", theta=theta_l2, epoch=epoch, global_step=it)
+
+    theta_g_euc_norm = np.linalg.norm(np.double(theta_g2 - theta_g1), 2)
+    theta_l_euc_norm = np.linalg.norm(np.double(theta_l2 - theta_l1), 2)
+    summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm, global_step=it)
+    summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm, global_step=it)
+
+
+def print_gradients(stn, args):
+    print(stn.module.transform_net.localization_net.heads[3].linear2.weight)
+    if args.separate_localization_net:
+        print(stn.module.transform_net.localization_net.backbones[1].conv2d_2.weight)
+    else:
+        print(stn.module.transform_net.localization_net.backbones[0].conv2d_2.weight)
+    print("-------------------------sanity check local grads-------------------------------")
+    print(stn.module.transform_net.localization_net.heads[3].linear2.weight.grad)
+    print("-------------------------sanity check global grads-------------------------------")
+    print(stn.module.transform_net.localization_net.heads[0].linear2.weight.grad)
+    if args.separate_localization_net:
+        print(stn.module.transform_net.localization_net.backbones[1].conv2d_2.weight.grad)
+    else:
+        print(stn.module.transform_net.localization_net.backbones[0].conv2d_2.weight.grad)
+    print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
+    print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
 
 def calc_area_of_grid(grid: torch.Tensor):
