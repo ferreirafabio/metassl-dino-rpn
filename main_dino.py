@@ -141,8 +141,10 @@ def get_args_parser():
     parser.add_argument("--world_size", default=8, type=int, help="default is for NEPS mode with DDP, so 8.")
     parser.add_argument("--gpu", default=8, type=int, help="default is for NEPS mode with DDP, so 8 GPUs.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
+    parser.add_argument("--resize_all_inputs", default=False, type=utils.bool_flag)
     parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
                         help="Set this flag to resize the images of the dataset, can be useful for datasets with varying resolutions")
+    parser.add_argument("--stn_color_augment", default=False, type=utils.bool_flag)
 
     # STN
     parser.add_argument("--invert_stn_gradients", default=False, type=utils.bool_flag,
@@ -209,12 +211,28 @@ def train_dino(args):
         json.dump(args.__dict__, f, indent=2, sort_keys=True)
 
     # ============ preparing data ... ============
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    if not args.resize_all_inputs and args.dataset == "ImageNet":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        collate_fn = custom_collate
+    elif args.resize_all_inputs and args.dataset == "ImageNet":
+        transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        collate_fn = None
+    elif args.dataset == "CIFAR10":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        collate_fn = None
 
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = utils.build_dataset(True, args, transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -223,7 +241,7 @@ def train_dino(args):
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
-        collate_fn=custom_collate,
+        collate_fn=collate_fn,
     )
 
     print(f"Data loaded: there are {len(dataset)} images.")
@@ -503,6 +521,39 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             penalty = 0
             if args.use_stn_penalty:
                 penalty = sim_loss(images=stn_images, theta=theta, target=images)
+
+            if args.stn_color_augment:
+                color_jitter = transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
+                gaussian_blur = transforms.GaussianBlur(1, (0.1, 2.0))
+                transform_global1 = transforms.Compose([
+                                                transforms.RandomApply([color_jitter], p=0.8),
+                                                transforms.RandomGrayscale(p=0.2),
+                                                transforms.RandomApply([gaussian_blur], p=1.0),
+                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                                transforms.ConvertImageDtype(torch.float32),
+                                                # transforms.ToTensor(),
+                                                ])
+
+                transform_global2 = transforms.Compose([
+                                                transforms.RandomApply([color_jitter], p=0.8),
+                                                transforms.RandomGrayscale(p=0.2),
+                                                transforms.RandomApply([gaussian_blur], p=0.1),
+                                                transforms.RandomSolarize(1, p=0.2),  # img is already normalized as input to STN; bound = 1 if img.is_floating_point() else 255
+                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                                transforms.ConvertImageDtype(torch.float32),
+                                                ])
+
+                transform_local = transforms.Compose([
+                                transforms.RandomApply([color_jitter], p=0.8),
+                                transforms.RandomGrayscale(p=0.2),
+                                transforms.RandomApply([gaussian_blur], p=0.5),
+                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                transforms.ConvertImageDtype(torch.float32),
+                                ])
+
+                stn_images[0] = transform_global1(stn_images[0])
+                stn_images[1] = transform_global2(stn_images[1])
+                stn_images[2:] = [transform_local(img) for img in stn_images[2:]]
 
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 summary_writer.write_image_grid(tag="images", images=stn_images, original_images=uncropped_images,

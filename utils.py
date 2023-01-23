@@ -506,7 +506,7 @@ def init_distributed_mode(args):
         sys.exit(1)
 
     dist.init_process_group(
-        backend="nccl",
+        backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
@@ -950,23 +950,15 @@ class SummaryWriterCustom(SummaryWriter):
         self.writer.close()
 
 
-def load_dataset(name, path, transform):
-    if name == "ImageNet":
-        return datasets.ImageFolder(path, transform=transform)
-    elif name == "CIFAR10":
-        return datasets.CIFAR10(
-            root=path,
-            train=True,
-            download=True,
-            transform=transform
-        )
-    elif name == "CIFAR100":
-        return datasets.CIFAR100(
-            root=path,
-            train=True,
-            download=True,
-            transform=transform
-        )
-
-    print(f"Does not support dataset: {name}")
+def build_dataset(is_train, args, transform):
+    # transform = build_transform(is_train, args)
+    if args.dataset == 'CIFAR10':
+        return datasets.CIFAR10(args.data_path, download=True, train=is_train, transform=transform)
+    if args.dataset == 'CIFAR100':
+        return datasets.CIFAR100(args.data_path, download=True, train=is_train, transform=transform)
+    elif args.dataset == 'ImageNet':
+        root = os.path.join(args.data_path, 'train' if is_train else 'val')
+        dataset = datasets.ImageFolder(root, transform=transform)
+        return dataset
+    print(f"Does not support dataset: {args.dataset}")
     sys.exit(1)
