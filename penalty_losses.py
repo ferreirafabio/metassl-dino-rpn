@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 from torchvision import transforms
+from utils import grad_reverse
 
 
 def histogram_batch(
@@ -198,9 +199,9 @@ class GridLoss(nn.Module):
 
 
 class ThetaCropsPenalty(nn.Module):
-    def __init__(self, invert: bool, eps: float = 1., loss_fn=nn.L1Loss, **kwargs):
+    def __init__(self, invert: bool = False, eps: float = 1., loss_fn=nn.HuberLoss, **kwargs):
         super().__init__()
-        self.invert = -1 if invert else 1
+        self.invert = invert
         self.eps = eps
         self.loss_fn = loss_fn()
 
@@ -211,8 +212,8 @@ class ThetaCropsPenalty(nn.Module):
 
         # narrow area down for the translation parameters, reduce adversarial freedom
         # stay closer to the center [0, 0]
-        low = math.pow(a, 0.5)
-        high = math.pow(b, 0.5)
+        low = math.pow(a, 0.125)
+        high = math.pow(b, 0.125)
         # sample uniformly in range [low, high]
         target = (high - low) * torch.rand(1, device=theta.get_device()) + low
         # target = (low + high) / 2
@@ -221,4 +222,7 @@ class ThetaCropsPenalty(nn.Module):
         txy = (1 - (theta[:, :, 2].abs() / 2)).prod(dim=1, keepdims=True)
         loss = self.loss_fn(det, targed) + self.loss_fn(txy, target)
 
-        return self.invert * self.eps * loss
+        if self.invert:
+            loss = grad_reverse(loss, self.eps)
+
+        return loss

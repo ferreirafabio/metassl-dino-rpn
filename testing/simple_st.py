@@ -1,8 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
-import utils
+
 
 toP = transforms.ToPILImage()
 toT = transforms.ToTensor()
@@ -58,6 +57,3 @@ print(f"{theta4.tolist()=}")
 # print(f"{theta4.tolist()=}")
 grid4 = F.affine_grid(theta4, size=img.shape, align_corners=align)
 out4 = F.grid_sample(img, grid4, align_corners=align)
-
-
-plt.show()

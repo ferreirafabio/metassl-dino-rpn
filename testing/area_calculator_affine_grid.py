@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
-from utils import plot
+from plot_script import plot
 
 
 if __name__ == "__main__":

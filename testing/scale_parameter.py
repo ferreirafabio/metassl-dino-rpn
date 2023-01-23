@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torchvision import datasets, transforms
-import utils
+from plot_script import plot
 
 
 if __name__ == "__main__":
@@ -77,4 +77,4 @@ if __name__ == "__main__":
     out = F.grid_sample(img, grid, align_corners=align)
     images[-1].append(toP(out.squeeze()))
 
-    utils.plot(images, normalised=True)
+    plot(images, normalised=True)

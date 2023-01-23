@@ -139,6 +139,8 @@ def get_args_parser():
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
+    parser.add_argument("--resize_all_inputs", default=False, type=utils.bool_flag,
+                        help="Resizes all images of the ImageNet dataset to one size. Here: 224x224")
     parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
                         help="Set this flag to resize the images of the dataset, images will be resized to the value given "
                              "in parameter --resize_size (default: 700). Can be useful for datasets with varying resolutions.")
@@ -189,6 +191,7 @@ def get_args_parser():
                         help="Scalar for the penalty loss")
     parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
                         help="Invert the penalty loss.")
+    parser.add_argument("--stn_color_augment", default=False, type=utils.bool_flag, help="todo")
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -206,14 +209,9 @@ def train_dino(args):
         json.dump(args.__dict__, f, indent=2, sort_keys=True)
 
     # ============ preparing data ... ============
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    collate = None if 'CIFAR' in args.dataset or args.resize_all_inputs else custom_collate
 
-    collate = None if 'CIFAR' in args.dataset else custom_collate
-
-    dataset = utils.build_dataset(True, args, transform)
+    dataset = utils.build_dataset(True, args)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -481,7 +479,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
                 param_group["lr"] = stn_lr_schedule[it]
 
         # move images to gpu
-
         if isinstance(images, list):
             images = [im.cuda(non_blocking=True) for im in images]
         else:
@@ -494,16 +491,48 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             if args.use_stn_penalty:
                 if args.penalty_loss == 'thetacropspenalty':
                     for t in thetas[:2]:
-                        penalty = penalty + sim_loss(theta=t, crops_scale=args.global_crops_scale)
+                        penalty += sim_loss(theta=t, crops_scale=args.global_crops_scale)
                     for t in thetas[2:]:
-                        penalty = penalty + sim_loss(theta=t, crops_scale=args.local_crops_scale)
+                        penalty += sim_loss(theta=t, crops_scale=args.local_crops_scale)
                 else:
-                    penalty = sim_loss(images=stn_images, theta=thetas, target=images)
-
+                    penalty = sim_loss(images=stn_images, target=images, theta=thetas,)
 
             # Log stuff to tensorboard
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 utils.summary_writer_write(summary_writer, stn_images, images, thetas, epoch, it)
+
+            if args.stn_color_augment:
+                color_jitter = transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
+                gaussian_blur = transforms.GaussianBlur(1, (0.1, 2.0))
+                transform_global1 = transforms.Compose([
+                                                transforms.RandomApply([color_jitter], p=0.8),
+                                                transforms.RandomGrayscale(p=0.2),
+                                                transforms.RandomApply([gaussian_blur], p=1.0),
+                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                                transforms.ConvertImageDtype(torch.float32),
+                                                # transforms.ToTensor(),
+                                                ])
+
+                transform_global2 = transforms.Compose([
+                                                transforms.RandomApply([color_jitter], p=0.8),
+                                                transforms.RandomGrayscale(p=0.2),
+                                                transforms.RandomApply([gaussian_blur], p=0.1),
+                                                transforms.RandomSolarize(1, p=0.2), # img is already normalized as input to STN; bound = 1 if img.is_floating_point() else 255
+                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                                transforms.ConvertImageDtype(torch.float32),
+                                                ])
+
+                transform_local = transforms.Compose([
+                                transforms.RandomApply([color_jitter], p=0.8),
+                                transforms.RandomGrayscale(p=0.2),
+                                transforms.RandomApply([gaussian_blur], p=0.5),
+                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                                transforms.ConvertImageDtype(torch.float32),
+                                ])
+
+                stn_images[0] = transform_global1(stn_images[0])
+                stn_images[1] = transform_global2(stn_images[1])
+                stn_images[2:] = [transform_local(img) for img in stn_images[2:]]
 
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
@@ -512,9 +541,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
             loss = dloss + penalty
 
             if torch.distributed.get_rank() == 0:
-                summary_writer.write_scalar(tag="dino_loss", scalar_value=dloss.item(), global_step=it)
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
-                summary_writer.write_scalar(tag="penalty", scalar_value=penalty.item(), global_step=it)
+                if args.use_stn_penalty:
+                    summary_writer.write_scalar(tag="dino_loss", scalar_value=dloss.item(), global_step=it)
+                    summary_writer.write_scalar(tag="penalty", scalar_value=penalty.item(), global_step=it)
                 summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
                 if args.use_stn_optimizer and not use_pretrained_stn:
                     summary_writer.write_scalar(tag="lr stn", scalar_value=stn_optimizer.param_groups[0]["lr"],
@@ -575,8 +605,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
 
         # logging
         metric_logger.update(loss=loss.item())
-        metric_logger.update(dino=dloss.item())
-        metric_logger.update(penalty=penalty.item())
+        if args.use_stn_penalty:
+            metric_logger.update(dino=dloss.item())
+            metric_logger.update(penalty=penalty.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         if args.use_stn_optimizer and not use_pretrained_stn:
             metric_logger.update(lrstn=stn_optimizer.param_groups[0]["lr"])

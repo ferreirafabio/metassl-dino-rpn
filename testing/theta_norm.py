@@ -2,7 +2,8 @@ import torch
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
-import utils
+from plot_script import plot
+
 
 if __name__ == "__main__":
     toTensor = transforms.ToTensor()
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     images.append(toPIL(out))
 
     labels = ['original', 'transformed', 'tanh', 'L1-norm', 'L2-norm']
-    utils.plot(images, labels=labels)
+    plot(images, labels=labels)
     plt.show()
 
     """

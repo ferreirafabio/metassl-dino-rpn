@@ -35,13 +35,12 @@ import torch
 from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
-from torchvision import datasets
+from torchvision import datasets, transforms
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 from typing import Any, List, Union, Type
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib
 import matplotlib.pyplot as plt
-matplotlib.use('Agg')
 
 
 class GaussianBlur(nn.Module):
@@ -934,6 +933,7 @@ class SummaryWriterCustom(SummaryWriter):
         # super().__init__()
         self.plot_size = plot_size
         self.writer = SummaryWriter(out_path)
+        matplotlib.use('Agg')
 
     def write_image_grid(self, tag, images, original_images, epoch, global_step):
         fig = image_grid(images=images, original_images=original_images, epoch=epoch, plot_size=self.plot_size)
@@ -950,8 +950,52 @@ class SummaryWriterCustom(SummaryWriter):
         self.writer.close()
 
 
-def build_dataset(is_train, args, transform):
-    # transform = build_transform(is_train, args)
+class GradientReverse(torch.autograd.Function):
+    scale = 1.0
+
+    @staticmethod
+    def forward(ctx, x):
+        #  autograd checks for changes in tensor to determine if backward should be called
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return GradientReverse.scale * grad_output.neg()
+
+
+def grad_reverse(x, scale=1.0):
+    GradientReverse.scale = scale
+    return GradientReverse.apply(x)
+
+
+def build_transform(args):
+    if not args.resize_all_inputs and args.dataset == "ImageNet":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+    elif args.resize_all_inputs and args.dataset == "ImageNet":
+        transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+    elif args.dataset == "CIFAR10":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+    elif args.dataset == "CIFAR100":
+        transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+    return transform
+
+
+def build_dataset(is_train, args):
+    transform = build_transform(args)
     if args.dataset == 'CIFAR10':
         return datasets.CIFAR10(args.data_path, download=True, train=is_train, transform=transform)
     if args.dataset == 'CIFAR100':

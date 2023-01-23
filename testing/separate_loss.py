@@ -3,7 +3,6 @@ from torch import nn
 from torch.nn import functional as F
 from copy import deepcopy
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
-from kornia import enhance
 
 
 def histogram(
@@ -13,11 +12,7 @@ def histogram(
         max: float = 1.0,
         kernel: str = "gaussian"
 ) -> torch.Tensor:
-    """Estimates the histogram of the input.
-
-    Args:
-        image:
-    """
+    """Estimates the histogram of the input."""
     delta = (max - min) / bins
 
     centers = min + delta * (torch.arange(bins, device=image.device, dtype=image.dtype) + 0.5)
