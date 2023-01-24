@@ -68,8 +68,8 @@ def eval_linear(args):
 
     train_transform, val_transform = load_transforms(args.dataset)
 
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
-    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    dataset_train = utils.build_dataset(True, args, train_transform)
+    dataset_val = utils.build_dataset(False, args, val_transform)
 
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
@@ -97,7 +97,7 @@ def eval_linear(args):
     # set optimizer
     optimizer = torch.optim.SGD(
         linear_classifier.parameters(),
-        args.lr * args.batch_size_per_gpu / 256,  # linear scaling rule
+        args.lr * args.batch_size_per_gpu / 768,  # linear scaling rule
         momentum=0.9,
         weight_decay=args.weight_decay,  # we do not apply weight decay
     )
@@ -278,11 +278,11 @@ def load_transforms(dataset: str):
         train = transforms.Compose([
             transforms.RandomResizedCrop(size=224, scale=(0.2, 1.), interpolation=InterpolationMode.BILINEAR),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomApply(
-                nn.ModuleList([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)]),
-                p=0.8
-            ),
-            transforms.RandomGrayscale(p=0.2),
+            # transforms.RandomApply(
+            #     nn.ModuleList([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)]),
+            #     p=0.8
+            # ),
+            # transforms.RandomGrayscale(p=0.2),
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
@@ -290,7 +290,7 @@ def load_transforms(dataset: str):
             transforms.Resize(256, interpolation=InterpolationMode.BILINEAR),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
     else:
         train = transforms.Compose([
