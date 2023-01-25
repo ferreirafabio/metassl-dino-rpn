@@ -68,8 +68,8 @@ def eval_linear(args):
 
     train_transform, val_transform = load_transforms(args.dataset)
 
-    dataset_train = datasets.CIFAR10(args.path, train=True, transform=train_transform, download=True)
-    dataset_val = datasets.CIFAR10(args.path, train=False, transform=val_transform, download=True)
+    dataset_train = datasets.CIFAR10(args.data_path, train=True, transform=train_transform, download=True)
+    dataset_val = datasets.CIFAR10(args.data_path, train=False, transform=val_transform, download=True)
 
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
