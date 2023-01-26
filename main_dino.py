@@ -52,8 +52,7 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
-                        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
-                                + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
+                        choices=['vit_nano', 'vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
                         help="""Name of architecture to train. For quick experiments with ViTs,
         we recommend using vit_tiny or vit_small.""")
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
@@ -61,6 +60,8 @@ def get_args_parser():
         values leads to better performance but requires more memory. Applies only
         for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling
         mixed precision training (--use_fp16 false) to avoid instabilities.""")
+    parser.add_argument('--img_size', default=224, type=int,
+                        help='Parameter if the Vision Transformer. (default: 224) ')
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
@@ -139,12 +140,13 @@ def get_args_parser():
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     parser.add_argument('--config_file_path', help="Should be set to a path that does not exist.")
+    # TODO how to distinguish both cases of resize inputs: Solved, but maybe check this later
     parser.add_argument("--resize_all_inputs", default=False, type=utils.bool_flag,
                         help="Resizes all images of the ImageNet dataset to one size. Here: 224x224")
     parser.add_argument("--resize_input", default=False, type=utils.bool_flag,
                         help="Set this flag to resize the images of the dataset, images will be resized to the value given "
-                             "in parameter --resize_size (default: 700). Can be useful for datasets with varying resolutions.")
-    parser.add_argument("--resize_size", default=700, type=int,
+                             "in parameter --resize_size (default: 512). Can be useful for datasets with varying resolutions.")
+    parser.add_argument("--resize_size", default=512, type=int,
                         help="If resize_input is True, this will be the maximum for the longer edge of the resized image.")
 
     # STN
@@ -170,9 +172,9 @@ def get_args_parser():
     parser.add_argument('--stn_pretrained_weights', default='', type=str,
                         help="Path to pretrained weights of the STN network. If specified, the STN is not trained and used to pre-process images solely.")
     parser.add_argument("--deep_loc_net", default=False, type=utils.bool_flag,
-                        help="Set this flag to use a deep loc net (default: False).")
+                        help="(legacy) Set this flag to use a deep loc net. (default: False).")
     parser.add_argument("--stn_res", default=(224, 96), type=int, nargs='+',
-                        help="Set this flag to only use one target resolution (128x128) after STN transformation (instead of 224x and 96x)")
+                        help="Set the resolution of the global and local crops of the STN (default: 224x and 96x)")
     parser.add_argument("--use_unbounded_stn", default=False, type=utils.bool_flag,
                         help="Set this flag to not use a tanh in the last STN layer (default: use bounded STN).")
     parser.add_argument("--stn_warmup_epochs", default=0, type=int,
@@ -186,7 +188,7 @@ def get_args_parser():
     parser.add_argument("--use_stn_penalty", default=False, type=utils.bool_flag,
                         help="Set this flag to add a penalty term to the loss. Similarity between input and output image of STN.")
     parser.add_argument("--penalty_loss", default="simloss", type=str, choices=list(penalty_dict.keys()),
-                        help="Specify the name if the similarity to use.")
+                        help="Specify the name of the similarity to use.")
     parser.add_argument("--epsilon", default=1., type=float,
                         help="Scalar for the penalty loss")
     parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
@@ -231,10 +233,11 @@ def train_dino(args):
     # if the network is a Vision Transformer (i.e. vit_tiny, vit_small, vit_base)
     if args.arch in vits.__dict__.keys():
         student = vits.__dict__[args.arch](
+            img_size=[args.img_size, ],
             patch_size=args.patch_size,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
         )
-        teacher = vits.__dict__[args.arch](patch_size=args.patch_size)
+        teacher = vits.__dict__[args.arch](img_size=[args.img_size, ], patch_size=args.patch_size,)
         embed_dim = student.embed_dim
     # if the network is a XCiT
     elif args.arch in torch.hub.list("facebookresearch/xcit:main"):

@@ -1,9 +1,10 @@
 import math
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from torch.nn import functional as F
-from torchvision.transforms.functional import crop, resize
+from torchvision.transforms.functional import resize, center_crop
 from torch.autograd import Variable
 
 N_PARAMS = {
@@ -420,19 +421,47 @@ class AugmentationNetwork(nn.Module):
         self.resize_size = resize_size
 
     def forward(self, x):
+        # if we get a tensor as input, simply pass it to the STN
+        if isinstance(x, torch.Tensor):
+            return self.transform_net(x)
+
+        # otherwise the input should be a list of PIL images, e.g. uncropped ImageNet dataset
+        if not isinstance(x, list):
+            x = [x]
+        for idx, img in enumerate(x):
+            if self.resize_input and max(img.size()) > self.resize_size:
+                img = resize(img, size=[self.resize_size, ], max_size=self.resize_size+1)
+            img = img.unsqueeze(0)
+            x[idx] = img
+
+        num_crops = self.transform_net.local_crops_number + 2
+        views = [[] for _ in range(num_crops)]
+        thetas = [[] for _ in range(num_crops)]
+        for img in x:
+            views_net, thetas_net = self.transform_net(img)
+
+            for idx, (view, theta) in enumerate(zip(views_net, thetas_net)):
+                views[idx].append(view)
+                thetas[idx].append(theta)
+
+        views = [torch.cat(view) for view in views]
+        thetas = [torch.cat(theta) for theta in thetas]
+
+        return views, thetas
+
+    def mc_forward(self, x):
         if self.resize_input:
             # If we have list of images with varying resolution, we need to transform them individually
             if not isinstance(x, list):
                 x = [x]
             # Prepare input for STN, additionally resize input to avoid OOM error
             for idx, img in enumerate(x):
-                try:
-                    img = resize(img, size=[self.resize_size, ], max_size=self.resize_size) \
-                        if max(img.size()) > self.resize_size else img
-                    img = img.unsqueeze(0)
-                    x[idx] = img
-                except Exception as e:
-                    print(e)
+                if max(img.size()) > self.resize_size:
+                    img = resize(img, size=[self.resize_size, ], max_size=self.resize_size+1)
+                if img.size(-1) != img.size(-2):
+                    img = center_crop(img, min(img.size()[-2:]))
+                img = img.unsqueeze(0)
+                x[idx] = img
             # Concat inputs with same size to improve inference/training time
             idx_crops = torch.cumsum(torch.unique_consecutive(
                 torch.tensor([inp.shape[-1] for inp in x]),
@@ -443,6 +472,10 @@ class AugmentationNetwork(nn.Module):
             num_crops = self.transform_net.local_crops_number + 2
             views = [[] for _ in range(num_crops)]
             thetas = [[] for _ in range(num_crops)]
+            idx_merged = [torch.zeros(1, dtype=idx_crops.dtype).cuda() for _ in range(dist.get_world_size())]
+            torch.nn.functional.pad(idx_crops, (0, len(x) - len(idx_crops)), value=0)
+            dist.all_gather(idx_merged, idx_crops)
+            idx_crops = torch.cat(idx_merged).unique()
             for end_idx in idx_crops:
                 views_net, thetas_net = self.transform_net(torch.cat(x[start_idx: end_idx]))
 
