@@ -27,10 +27,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from torchvision import models as torchvision_models
+import torchvision.transforms.functional as fn
 
 import utils
 import vision_transformer as vits
-from penalty_losses import HISTLoss, SIMLoss, ThetaLoss, ThetaCropsPenalty
+from penalties import HISTLoss, SIMLoss, ThetaLoss, ThetaCropsPenalty
 from stn import AugmentationNetwork, STN
 from utils import SummaryWriterCustom, custom_collate
 from vision_transformer import DINOHead
@@ -52,7 +53,8 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
-                        choices=['vit_nano', 'vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
+                        choices=['vit_nano', 'vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny',
+                                 'deit_small'] + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
                         help="""Name of architecture to train. For quick experiments with ViTs,
         we recommend using vit_tiny or vit_small.""")
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
@@ -237,7 +239,7 @@ def train_dino(args):
             patch_size=args.patch_size,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
         )
-        teacher = vits.__dict__[args.arch](img_size=[args.img_size, ], patch_size=args.patch_size,)
+        teacher = vits.__dict__[args.arch](img_size=[args.img_size, ], patch_size=args.patch_size, )
         embed_dim = student.embed_dim
     # if the network is a XCiT
     elif args.arch in torch.hub.list("facebookresearch/xcit:main"):
@@ -321,15 +323,16 @@ def train_dino(args):
         args.epochs,
     ).cuda()
 
-    sim_loss = None
+    stn_penalty = None
     if args.use_stn_penalty:
-        Loss = penalty_dict[args.penalty_loss]
-        sim_loss = Loss(
+        stn_penalty = penalty_dict[args.penalty_loss](
             invert=args.invert_penalty,
+            eps=args.epsilon,
+            local_crops_scale=args.local_crops_scale,
+            global_crops_scale=args.global_crops_scale,
             resolution=32,
             exponent=2,
             bins=100,
-            eps=args.epsilon,
         ).cuda()
 
     # ============ preparing optimizer ... ============
@@ -345,16 +348,15 @@ def train_dino(args):
             p.requires_grad = False
 
     if not args.use_stn_optimizer and not use_pretrained_stn:
-        # add to regularized param group
-        # student_params = params_groups[0]['params']
-        # all_params = student_params + list(stn.parameters())
-        # params_groups[0]['params'] = all_params
-
         # do not use wd scheduling of STN params
         student_params = params_groups[1]['params']
         all_params = student_params + list(stn.parameters())
         params_groups[1]['params'] = all_params
 
+    # ============ ColorAugments after STN ============
+    color_augment = ColorAugmentation(args.local_crops_number) if args.stn_color_augment else None
+
+    # ============ init optimizers ... ============
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
         if args.use_stn_optimizer and not use_pretrained_stn:
@@ -432,10 +434,10 @@ def train_dino(args):
     for epoch in range(start_epoch, end_epoch):
         data_loader.sampler.set_epoch(epoch)
         # ============ training one epoch of DINO ... ============
-        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss,
+        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalty,
                                       data_loader, optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule,
                                       momentum_schedule, epoch, fp16_scaler, stn, use_pretrained_stn, args,
-                                      summary_writer)
+                                      summary_writer, color_augment)
 
         # ============ writing logs ... ============
         save_dict = {
@@ -463,9 +465,9 @@ def train_dino(args):
     print('Training time {}'.format(total_time_str))
 
 
-def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, data_loader, optimizer,
+def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalty, data_loader, optimizer,
                     stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, stn, use_pretrained_stn, args, summary_writer):
+                    fp16_scaler, stn, use_pretrained_stn, args, summary_writer, color_augment):
     metric_logger = utils.MetricLogger(delimiter=" ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
@@ -490,52 +492,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, sim_loss, 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             stn_images, thetas = stn(images)
-            penalty = torch.zeros(1, dtype=torch.float).cuda()
+            penalty = 0
             if args.use_stn_penalty:
-                if args.penalty_loss == 'thetacropspenalty':
-                    for t in thetas[:2]:
-                        penalty += sim_loss(theta=t, crops_scale=args.global_crops_scale)
-                    for t in thetas[2:]:
-                        penalty += sim_loss(theta=t, crops_scale=args.local_crops_scale)
-                else:
-                    penalty = sim_loss(images=stn_images, target=images, theta=thetas,)
+                penalty = stn_penalty(images=stn_images, target=images, thetas=thetas)
 
             # Log stuff to tensorboard
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 utils.summary_writer_write(summary_writer, stn_images, images, thetas, epoch, it)
 
-            if args.stn_color_augment:
-                color_jitter = transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
-                gaussian_blur = transforms.GaussianBlur(1, (0.1, 2.0))
-                transform_global1 = transforms.Compose([
-                                                transforms.RandomApply([color_jitter], p=0.8),
-                                                transforms.RandomGrayscale(p=0.2),
-                                                transforms.RandomApply([gaussian_blur], p=1.0),
-                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-                                                transforms.ConvertImageDtype(torch.float32),
-                                                # transforms.ToTensor(),
-                                                ])
-
-                transform_global2 = transforms.Compose([
-                                                transforms.RandomApply([color_jitter], p=0.8),
-                                                transforms.RandomGrayscale(p=0.2),
-                                                transforms.RandomApply([gaussian_blur], p=0.1),
-                                                transforms.RandomSolarize(1, p=0.2), # img is already normalized as input to STN; bound = 1 if img.is_floating_point() else 255
-                                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-                                                transforms.ConvertImageDtype(torch.float32),
-                                                ])
-
-                transform_local = transforms.Compose([
-                                transforms.RandomApply([color_jitter], p=0.8),
-                                transforms.RandomGrayscale(p=0.2),
-                                transforms.RandomApply([gaussian_blur], p=0.5),
-                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-                                transforms.ConvertImageDtype(torch.float32),
-                                ])
-
-                stn_images[0] = transform_global1(stn_images[0])
-                stn_images[1] = transform_global2(stn_images[1])
-                stn_images[2:] = [transform_local(img) for img in stn_images[2:]]
+            if color_augment:
+                stn_images = color_augment(stn_images)
 
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
@@ -676,6 +642,45 @@ class DINOLoss(nn.Module):
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
+
+
+class ColorAugmentation(object):
+    def __init__(self, local_crops_number):
+        self.local_crops_number = local_crops_number
+        color_jitter = transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
+        gaussian_blur = transforms.GaussianBlur(1, (0.1, 2.0))
+        self.transform_global1 = transforms.Compose([
+            transforms.RandomApply([color_jitter], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([gaussian_blur], p=1.0),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.ConvertImageDtype(torch.float32),
+            # transforms.ToTensor(),
+        ])
+
+        self.transform_global2 = transforms.Compose([
+            transforms.RandomApply([color_jitter], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([gaussian_blur], p=0.1),
+            transforms.RandomSolarize(1, p=0.2),
+            # img is already normalized as input to STN; bound = 1 if img.is_floating_point() else 255
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.ConvertImageDtype(torch.float32),
+        ])
+
+        self.transform_local = transforms.Compose([
+            transforms.RandomApply([color_jitter], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([gaussian_blur], p=0.5),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.ConvertImageDtype(torch.float32),
+        ])
+
+    def __call__(self, images):
+        crops = [self.transform_global1(images[0]), self.transform_global2(images[1])]
+        for img in images[2:]:
+            crops.append(self.transform_local(img))
+        return crops
 
 
 if __name__ == '__main__':

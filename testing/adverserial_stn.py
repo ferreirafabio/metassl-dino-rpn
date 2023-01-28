@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 # from stn import STN
 from stn import STN
-from penalty_losses import ThetaCropsPenalty
+from penalties import ThetaCropsPenalty
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader

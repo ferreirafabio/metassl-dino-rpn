@@ -233,9 +233,17 @@ class VisionTransformer(nn.Module):
         return output
 
 
+def vit_96(**kwargs):  # pico
+    model = VisionTransformer(
+        embed_dim=96, depth=6, num_heads=3, mlp_ratio=4,
+        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    return model
+
+
 def vit_nano(**kwargs):
     model = VisionTransformer(
-        embed_dim=192, depth=8, num_heads=3, mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        embed_dim=192, depth=8, num_heads=3, mlp_ratio=4,
+        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
 

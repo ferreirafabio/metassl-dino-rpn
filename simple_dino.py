@@ -31,7 +31,7 @@ from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
-from penalty_losses import HISTLoss, SIMLoss, ThetaLoss
+from penalties import HISTLoss, SIMLoss, ThetaLoss
 from stn import AugmentationNetwork, STN
 from utils import custom_collate, SummaryWriterCustom
 from vision_transformer import DINOHead

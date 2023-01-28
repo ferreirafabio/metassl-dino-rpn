@@ -199,14 +199,34 @@ class GridLoss(nn.Module):
 
 
 class ThetaCropsPenalty(nn.Module):
-    def __init__(self, invert: bool = False, eps: float = 1., loss_fn=nn.HuberLoss, **kwargs):
+    def __init__(self,
+                 invert: bool = False,
+                 eps: float = 1.,
+                 local_crops_scale=(0.05, 0.4),
+                 global_crops_scale=(0.4, 1),
+                 loss_fn=nn.HuberLoss,
+                 **kwargs):
         super().__init__()
         self.invert = invert
         self.eps = eps
         self.loss_fn = loss_fn()
+        self.local_crops_scale = local_crops_scale
+        self.global_crops_scale = global_crops_scale
 
-    def forward(self, theta, crops_scale):
-        a, b = crops_scale
+    def forward(self, thetas, **args):
+        loss = 0
+        for x in thetas[:2]:
+            loss += self._loss(x, self.global_crops_scale)
+        for x in thetas[2:]:
+            loss += self._loss(x, self.local_crops_scale)
+
+        if self.invert:
+            loss = grad_reverse(loss, self.eps)
+
+        return loss
+
+    def _loss(self, theta, scale):
+        a, b = scale
         targed = (b - a) * torch.rand(theta.size(0), device=theta.get_device()) + a
         # targed = (a + b) / 2
 
@@ -220,9 +240,5 @@ class ThetaCropsPenalty(nn.Module):
 
         det = torch.det(theta[:, :, :2].float()).abs()
         txy = (1 - (theta[:, :, 2].abs() / 2)).prod(dim=1)
-        loss = self.loss_fn(det, targed) + self.loss_fn(txy, target)
 
-        if self.invert:
-            loss = grad_reverse(loss, self.eps)
-
-        return loss
+        return self.loss_fn(det, targed) + self.loss_fn(txy, target)
