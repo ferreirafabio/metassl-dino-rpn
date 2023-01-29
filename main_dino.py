@@ -25,9 +25,9 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import transforms
+from torchvision import transforms, datasets
 from torchvision import models as torchvision_models
-import torchvision.transforms.functional as fn
+from torchvision.transforms.functional import InterpolationMode
 
 import utils
 import vision_transformer as vits
@@ -207,6 +207,7 @@ def train_dino(args):
     utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
     cudnn.benchmark = True
+    torch.autograd.set_detect_anomaly(True)
 
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     with (Path(args.output_dir) / "settings.json").open("w") as f:
@@ -215,7 +216,12 @@ def train_dino(args):
     # ============ preparing data ... ============
     collate = None if 'CIFAR' in args.dataset or args.resize_all_inputs else custom_collate
 
-    dataset = utils.build_dataset(True, args)
+    transform = DataAugmentationDINO(
+        args.global_crops_scale,
+        args.local_crops_scale,
+        args.local_crops_number,
+    )
+    dataset = datasets.CIFAR10(args.data_path, train=True, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -255,7 +261,7 @@ def train_dino(args):
     else:
         print(f"Unknown architecture: {args.arch}")
 
-    transform_net = STN(
+    stn_global = STN(
         mode=args.stn_mode,
         invert_gradients=args.invert_stn_gradients,
         separate_localization_net=args.separate_localization_net,
@@ -265,13 +271,22 @@ def train_dino(args):
         local_crops_number=args.local_crops_number,
         global_crops_scale=args.global_crops_scale,
         local_crops_scale=args.local_crops_scale,
-        resolution=args.stn_res,
+        resolution=args.stn_res[0],
         unbounded_stn=args.use_unbounded_stn,
     )
-    stn = AugmentationNetwork(
-        transform_net=transform_net,
-        resize_input=args.resize_input,
-        resize_size=args.resize_size,
+
+    stn_local = STN(
+        mode=args.stn_mode,
+        invert_gradients=args.invert_stn_gradients,
+        separate_localization_net=args.separate_localization_net,
+        conv1_depth=args.stn_conv1_depth,
+        conv2_depth=args.stn_conv2_depth,
+        theta_norm=args.stn_theta_norm,
+        local_crops_number=args.local_crops_number,
+        global_crops_scale=args.global_crops_scale,
+        local_crops_scale=args.local_crops_scale,
+        resolution=args.stn_res[1],
+        unbounded_stn=args.use_unbounded_stn,
     )
 
     # multi-crop wrapper handles forward with inputs of different resolutions
@@ -286,7 +301,7 @@ def train_dino(args):
         DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
     )
     # move networks to gpu
-    student, teacher, stn = student.cuda(), teacher.cuda(), stn.cuda()
+    student, teacher, stn_global, stn_local = student.cuda(), teacher.cuda(), stn_global.cuda(), stn_local.cuda()
 
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
@@ -301,11 +316,13 @@ def train_dino(args):
         # teacher_without_ddp and teacher are the same thing
         teacher_without_ddp = teacher
 
-    if utils.has_batchnorms(stn):
-        stn = nn.SyncBatchNorm.convert_sync_batchnorm(stn)
+    if utils.has_batchnorms(stn_global):
+        stn_global = nn.SyncBatchNorm.convert_sync_batchnorm(stn_global)
+        stn_local = nn.SyncBatchNorm.convert_sync_batchnorm(stn_local)
 
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
-    stn = nn.parallel.DistributedDataParallel(stn, device_ids=[args.gpu])
+    stn_global = nn.parallel.DistributedDataParallel(stn_global, device_ids=[args.gpu])
+    stn_local = nn.parallel.DistributedDataParallel(stn_local, device_ids=[args.gpu])
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
@@ -323,34 +340,16 @@ def train_dino(args):
         args.epochs,
     ).cuda()
 
-    stn_penalty = None
-    if args.use_stn_penalty:
-        stn_penalty = penalty_dict[args.penalty_loss](
-            invert=args.invert_penalty,
-            eps=args.epsilon,
-            local_crops_scale=args.local_crops_scale,
-            global_crops_scale=args.global_crops_scale,
-            resolution=32,
-            exponent=2,
-            bins=100,
-        ).cuda()
-
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
 
     # ============ handling STN optimization ============
     stn_optimizer = None
-    use_pretrained_stn = os.path.isfile(args.stn_pretrained_weights)
-    if use_pretrained_stn:
-        utils.load_stn_pretrained_weights(stn, args.stn_pretrained_weights)
 
-        for p in stn.parameters():
-            p.requires_grad = False
-
-    if not args.use_stn_optimizer and not use_pretrained_stn:
+    if not args.use_stn_optimizer:
         # do not use wd scheduling of STN params
         student_params = params_groups[1]['params']
-        all_params = student_params + list(stn.parameters())
+        all_params = student_params + list(stn_global.parameters()) + list(stn_local.parameters())
         params_groups[1]['params'] = all_params
 
     # ============ ColorAugments after STN ============
@@ -359,16 +358,10 @@ def train_dino(args):
     # ============ init optimizers ... ============
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
-        if args.use_stn_optimizer and not use_pretrained_stn:
-            stn_optimizer = torch.optim.AdamW(list(stn.parameters()))  # lr is set by scheduler
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
-        if args.use_stn_optimizer and not use_pretrained_stn:
-            stn_optimizer = torch.optim.SGD(list(stn.parameters()), lr=0)  # lr is set by scheduler
     elif args.optimizer == "lars":
         optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
-        if args.use_stn_optimizer and not use_pretrained_stn:
-            stn_optimizer = torch.optim.LARS(list(stn.parameters()))  # lr is set by scheduler
 
     # for mixed precision training
     fp16_scaler = None
@@ -388,15 +381,6 @@ def train_dino(args):
         args.epochs, len(data_loader),
     )
 
-    stn_lr_schedule = None
-    if stn_optimizer and not use_pretrained_stn:
-        stn_lr_schedule = utils.cosine_scheduler(
-            args.stn_lr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
-            args.min_lr,
-            args.epochs, len(data_loader),
-            warmup_epochs=args.stn_warmup_epochs,
-        )
-
     # momentum parameter is increased to 1. during training with a cosine schedule
     momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
                                                args.epochs, len(data_loader))
@@ -412,15 +396,12 @@ def train_dino(args):
         optimizer=optimizer,
         fp16_scaler=fp16_scaler,
         dino_loss=dino_loss,
-        stn=stn,
+        stn_global=stn_global,
+        stn_local=stn_local,
         stn_optimizer=stn_optimizer,
     )
 
     start_epoch = to_restore["epoch"]
-
-    if use_pretrained_stn:
-        for p in stn.parameters():
-            p.requires_grad = False
 
     summary_writer = None
     if torch.distributed.get_rank() == 0:
@@ -434,9 +415,9 @@ def train_dino(args):
     for epoch in range(start_epoch, end_epoch):
         data_loader.sampler.set_epoch(epoch)
         # ============ training one epoch of DINO ... ============
-        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalty,
-                                      data_loader, optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule,
-                                      momentum_schedule, epoch, fp16_scaler, stn, use_pretrained_stn, args,
+        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
+                                      data_loader, optimizer, lr_schedule, wd_schedule,
+                                      momentum_schedule, epoch, fp16_scaler, stn_global, stn_local, args,
                                       summary_writer, color_augment)
 
         # ============ writing logs ... ============
@@ -447,7 +428,8 @@ def train_dino(args):
             'epoch': epoch + 1,
             'args': args,
             'dino_loss': dino_loss.state_dict(),
-            'stn': stn.state_dict(),
+            'stn_global': stn_global.state_dict(),
+            'stn_local': stn_local.state_dict(),
             'stn_optimizer': stn_optimizer.state_dict() if stn_optimizer else None,
         }
         if fp16_scaler is not None:
@@ -465,9 +447,9 @@ def train_dino(args):
     print('Training time {}'.format(total_time_str))
 
 
-def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalty, data_loader, optimizer,
-                    stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, stn, use_pretrained_stn, args, summary_writer, color_augment):
+def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader, optimizer,
+                    lr_schedule, wd_schedule, momentum_schedule, epoch,
+                    fp16_scaler, stn_global, stn_local, args, summary_writer, color_augment):
     metric_logger = utils.MetricLogger(delimiter=" ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
@@ -479,10 +461,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
 
-        if args.use_stn_optimizer and not use_pretrained_stn:
-            for i, param_group in enumerate(stn_optimizer.param_groups):
-                param_group["lr"] = stn_lr_schedule[it]
-
         # move images to gpu
         if isinstance(images, list):
             images = [im.cuda(non_blocking=True) for im in images]
@@ -491,10 +469,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            stn_images, thetas = stn(images)
-            penalty = 0
-            if args.use_stn_penalty:
-                penalty = stn_penalty(images=stn_images, target=images, thetas=thetas)
+            stn_images = []
+            thetas = []
+            for img in images[:2]:
+                im, th = stn_global(img)
+                stn_images.append(im)
+                thetas.append(th)
+            for img in images[2:]:
+                im, th = stn_local(img)
+                stn_images.append(im)
+                thetas.append(th)
 
             # Log stuff to tensorboard
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
@@ -506,27 +490,15 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
             # continue
             teacher_output = teacher(stn_images[:2])  # only the 2 global views pass through the teacher
             student_output = student(stn_images)
-            dloss = dino_loss(student_output, teacher_output, epoch)
-            loss = dloss + penalty
+            loss = dino_loss(student_output, teacher_output, epoch)
 
             if torch.distributed.get_rank() == 0:
                 summary_writer.write_scalar(tag="loss", scalar_value=loss.item(), global_step=it)
-                if args.use_stn_penalty:
-                    summary_writer.write_scalar(tag="dino_loss", scalar_value=dloss.item(), global_step=it)
-                    summary_writer.write_scalar(tag="penalty", scalar_value=penalty.item(), global_step=it)
                 summary_writer.write_scalar(tag="lr", scalar_value=optimizer.param_groups[0]["lr"], global_step=it)
-                if args.use_stn_optimizer and not use_pretrained_stn:
-                    summary_writer.write_scalar(tag="lr stn", scalar_value=stn_optimizer.param_groups[0]["lr"],
-                                                global_step=it)
-                summary_writer.write_scalar(tag="weight decay", scalar_value=optimizer.param_groups[0]["weight_decay"],
-                                            global_step=it)
 
         if not math.isfinite(loss.item()):
             print("Loss is {}, stopping training".format(loss.item()))
             raise ValueError("Loss value is invalid.")
-
-        if args.use_stn_optimizer and not use_pretrained_stn:
-            stn_optimizer.zero_grad()
 
         # student update
         optimizer.zero_grad()
@@ -540,9 +512,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
 
             optimizer.step()
 
-            if args.use_stn_optimizer and not use_pretrained_stn:
-                stn_optimizer.step()
-
         else:
 
             fp16_scaler.scale(loss).backward()
@@ -554,14 +523,11 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
 
             fp16_scaler.step(optimizer)
 
-            if args.use_stn_optimizer and not use_pretrained_stn:
-                fp16_scaler.step(stn_optimizer)
-
             fp16_scaler.update()
 
         # Print gradients to STDOUT
         if it % args.grad_check_freq == 0 and torch.distributed.get_rank() == 0:
-            utils.print_gradients(stn, args)
+            utils.print_gradients(stn_global, args)
 
         # EMA update for the teacher
         # TODO: do we need EMA update for the global heads? grads flow to global heads for now since we don't stop gradient there but may be worth trying to mimic DINO
@@ -574,12 +540,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
 
         # logging
         metric_logger.update(loss=loss.item())
-        if args.use_stn_penalty:
-            metric_logger.update(dino=dloss.item())
-            metric_logger.update(penalty=penalty.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        if args.use_stn_optimizer and not use_pretrained_stn:
-            metric_logger.update(lrstn=stn_optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
 
     # gather the stats from all processes
@@ -680,6 +641,29 @@ class ColorAugmentation(object):
         crops = [self.transform_global1(images[0]), self.transform_global2(images[1])]
         for img in images[2:]:
             crops.append(self.transform_local(img))
+        return crops
+
+
+class DataAugmentationDINO(object):
+    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
+        # first global crop
+        self.global_transform = transforms.Compose([
+            transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+        # transformation for the local small crops
+        self.local_crops_number = local_crops_number
+        self.local_transform = transforms.Compose([
+            transforms.RandomResizedCrop(16, scale=local_crops_scale, interpolation=InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+
+    def __call__(self, image):
+        crops = [self.global_transform(image), self.global_transform(image)]
+        for _ in range(self.local_crops_number):
+            crops.append(self.local_transform(image))
         return crops
 
 

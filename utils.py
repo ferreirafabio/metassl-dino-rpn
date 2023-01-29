@@ -881,7 +881,7 @@ def image_grid(images, original_images, epoch, plot_size=16):
     # Create a figure to contain the plot.
     figure = plt.figure(figsize=(20, 50))
     figure.tight_layout()
-    num_images = min(len(original_images), plot_size)
+    num_images = min(len(original_images[0]), plot_size)
     plt.subplots_adjust(hspace=0.5)
 
     g1 = images[0]
@@ -892,7 +892,7 @@ def image_grid(images, original_images, epoch, plot_size=16):
     titles = [f"orig@{epoch} epoch", "global 1", "global 2", "local 1", "local 2"]
     total = 0
     for i in range(num_images):  # orig_img in enumerate(original_images, 1):
-        orig_img = original_images[i]
+        orig_img = original_images[0][i]
         g1_img = g1[i]
         g2_img = g2[i]
         l1_img = l1[i]
@@ -1026,19 +1026,11 @@ def summary_writer_write(summary_writer, stn_images, images, thetas, epoch, it):
 
 
 def print_gradients(stn, args):
-    print(stn.module.transform_net.localization_net.heads[3].linear2.weight)
-    if args.separate_localization_net:
-        print(stn.module.transform_net.localization_net.backbones[1].conv2d_2.weight)
-    else:
-        print(stn.module.transform_net.localization_net.backbones[0].conv2d_2.weight)
-    print("-------------------------sanity check local grads-------------------------------")
-    print(stn.module.transform_net.localization_net.heads[3].linear2.weight.grad)
+    print(stn.module.localization_net.heads[0].linear2.weight)
+    print(stn.module.localization_net.backbones[0].conv2d_2.weight)
     print("-------------------------sanity check global grads-------------------------------")
-    print(stn.module.transform_net.localization_net.heads[0].linear2.weight.grad)
-    if args.separate_localization_net:
-        print(stn.module.transform_net.localization_net.backbones[1].conv2d_2.weight.grad)
-    else:
-        print(stn.module.transform_net.localization_net.backbones[0].conv2d_2.weight.grad)
+    print(stn.module.localization_net.heads[0].linear2.weight.grad)
+    print(stn.module.localization_net.backbones[0].conv2d_2.weight.grad)
     print(f"CUDA MAX MEM:           {torch.cuda.max_memory_allocated()}")
     print(f"CUDA MEM ALLOCATED:     {torch.cuda.memory_allocated()}")
 
