@@ -405,8 +405,8 @@ def train_dino(args):
 
     # epsilon parameter of penalties
     epsilon_schedule = utils.epsilon_scheduler(
+        args.epsilon_final,  # start at epsilon and go to final
         args.epsilon,
-        args.epsilon_final,
         args.epochs,
         len(data_loader),
         args.epsilon_cycles

@@ -2,9 +2,9 @@
 #SBATCH -p mlhiwidlc_gpu-rtx2080-advanced # partition (queue)
 #SBATCH -t 23:59:59 # time (D-HH:MM:SS)
 #SBATCH --gres=gpu:4
-#SBATCH -J test-cosine-epsilon # sets the job name. If not specified, the file name will be used as job name
-#SBATCH -o /work/dlclarge1/rapanti-stn_cifar/experiments/test-cosine-epsilon/log/%A.%a.%N.out  # STDOUT
-#SBATCH -e /work/dlclarge1/rapanti-stn_cifar/experiments/test-cosine-epsilon/log/%A.%a.%N.out  # STDERR
+#SBATCH -J test-cosine-epsilon-1 # sets the job name. If not specified, the file name will be used as job name
+#SBATCH -o /work/dlclarge1/rapanti-stn_cifar/experiments/test-cosine-epsilon-1/log/%A.%a.%N.out  # STDOUT
+#SBATCH -e /work/dlclarge1/rapanti-stn_cifar/experiments/test-cosine-epsilon-1/log/%A.%a.%N.out  # STDERR
 #SBATCH --array 0-3%1
 
 # Print some information about the job to STDOUT
@@ -15,7 +15,7 @@ echo "Running job $SLURM_JOB_NAME with given JID $SLURM_JOB_ID on queue $SLURM_J
 source /home/rapanti/.profile
 source activate dino
 
-EXP_D=/work/dlclarge1/rapanti-stn_cifar/experiments/test-cosine-epsilon
+EXP_D=/work/dlclarge1/rapanti-stn_cifar/experiments/test-cosine-epsilon-1
 
 # Job to perform
 torchrun \
@@ -43,7 +43,7 @@ torchrun \
       --penalty_loss thetacropspenalty \
       --epsilon 100 \
       --epsilon_final 10 \
-      --epsilon_cycles 3 \
+      --epsilon_cycles 1 \
       --local_crops_number 8 \
       --local_crops_scale 0.05 0.4 \
       --global_crops_scale 0.4 1 \

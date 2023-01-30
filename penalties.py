@@ -220,6 +220,8 @@ class ThetaCropsPenalty(nn.Module):
         for x in thetas[2:]:
             loss += self._loss(x, self.local_crops_scale)
 
+        loss /= len(thetas)
+
         if self.invert:
             loss = grad_reverse(loss, self.eps)
         else:
@@ -243,4 +245,4 @@ class ThetaCropsPenalty(nn.Module):
         det = torch.det(theta[:, :, :2].float()).abs()
         txy = (1 - (theta[:, :, 2].abs() / 2)).prod(dim=1)
 
-        return (self.loss_fn(det, targed) + self.loss_fn(txy, target)) / theta.size(0)
+        return self.loss_fn(det, targed) + self.loss_fn(txy, target)
