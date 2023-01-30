@@ -27,9 +27,9 @@ torchrun \
   --standalone \
     main_dino.py \
       --arch vit_nano \
-      --img_size 60 \
-      --patch_size 6 \
-      --stn_res 60 30 \
+      --img_size 32 \
+      --patch_size 4 \
+      --stn_res 32 16 \
       --out_dim 32768 \
       --data_path /work/dlclarge1/rapanti-stn_cifar/data/datasets/CIFAR10 \
       --dataset CIFAR10 \
