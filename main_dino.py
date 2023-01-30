@@ -192,10 +192,12 @@ def get_args_parser():
     parser.add_argument("--penalty_loss", default="simloss", type=str, choices=list(penalty_dict.keys()),
                         help="Specify the name of the similarity to use.")
     parser.add_argument("--epsilon", default=1., type=float,
-                        help="Scalar for the penalty loss")
+                        help="Scalar for the penalty loss. Base value for the epsilon scheduler.")
     parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
                         help="Invert the penalty loss.")
     parser.add_argument("--stn_color_augment", default=False, type=utils.bool_flag, help="todo")
+    parser.add_argument("--epsilon_final", default=1., type=float, help="TODO")
+    parser.add_argument("--epsilon_cycles", default=0, type=int, help="TODO")
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -400,6 +402,15 @@ def train_dino(args):
     # momentum parameter is increased to 1. during training with a cosine schedule
     momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
                                                args.epochs, len(data_loader))
+
+    # epsilon parameter of penalties
+    epsilon_schedule = utils.epsilon_scheduler(
+        args.epsilon,
+        args.epsilon_final,
+        args.epochs,
+        len(data_loader),
+        args.epsilon_cycles
+    )
     print(f"Loss, optimizer and schedulers ready.")
 
     # ============ optionally resume training ... ============
@@ -437,7 +448,7 @@ def train_dino(args):
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalty,
                                       data_loader, optimizer, stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule,
                                       momentum_schedule, epoch, fp16_scaler, stn, use_pretrained_stn, args,
-                                      summary_writer, color_augment)
+                                      summary_writer, color_augment, epsilon_schedule)
 
         # ============ writing logs ... ============
         save_dict = {
@@ -467,7 +478,7 @@ def train_dino(args):
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalty, data_loader, optimizer,
                     stn_optimizer, lr_schedule, wd_schedule, stn_lr_schedule, momentum_schedule, epoch,
-                    fp16_scaler, stn, use_pretrained_stn, args, summary_writer, color_augment):
+                    fp16_scaler, stn, use_pretrained_stn, args, summary_writer, color_augment, epsilon_schedule):
     metric_logger = utils.MetricLogger(delimiter=" ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
@@ -482,6 +493,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
         if args.use_stn_optimizer and not use_pretrained_stn:
             for i, param_group in enumerate(stn_optimizer.param_groups):
                 param_group["lr"] = stn_lr_schedule[it]
+
+        if stn_penalty:
+            stn_penalty.eps = epsilon_schedule[it]
 
         # move images to gpu
         if isinstance(images, list):

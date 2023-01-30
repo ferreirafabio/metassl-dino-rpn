@@ -217,6 +217,14 @@ def cosine_scheduler(base_value, final_value, epochs, niter_per_ep, warmup_epoch
     return schedule
 
 
+def epsilon_scheduler(base_value, final_value, epochs, niter_per_ep, cycles):
+    iters = np.arange(epochs * niter_per_ep)
+    schedule = final_value + 0.5 * (base_value - final_value) * (1 + np.cos((2 * cycles + 1) * np.pi * iters / len(iters)))
+
+    assert len(schedule) == epochs * niter_per_ep
+    return schedule
+
+
 def bool_flag(s):
     """
     Parse boolean arguments from the command line.
@@ -505,7 +513,7 @@ def init_distributed_mode(args):
         sys.exit(1)
 
     dist.init_process_group(
-        backend="nccl",
+        backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
@@ -966,6 +974,24 @@ class GradientReverse(torch.autograd.Function):
 def grad_reverse(x, scale=1.0):
     GradientReverse.scale = scale
     return GradientReverse.apply(x)
+
+
+class GradientScale(torch.autograd.Function):
+    scale = 1.0
+
+    @staticmethod
+    def forward(ctx, x):
+        #  autograd checks for changes in tensor to determine if backward should be called
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return GradientScale.scale * grad_output
+
+
+def grad_scale(x, scale=1.0):
+    GradientScale.scale = scale
+    return GradientScale.apply(x)
 
 
 def build_transform(args):

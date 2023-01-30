@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
 from torchvision import transforms
-from utils import grad_reverse
+from utils import grad_reverse, grad_scale
 
 
 def histogram_batch(
@@ -170,10 +170,10 @@ class ThetaLoss(nn.Module):
         self.eps = eps * self.invert
         self.loss_fn = nn.MSELoss()
 
-    def forward(self, theta, **args):
-        identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=theta[0].get_device())
+    def forward(self, thetas, **args):
+        identity = torch.tensor([[[1, 0, 0], [0, 1, 0]]], dtype=torch.float, device=thetas[0].get_device())
         loss = 0
-        for t in theta:
+        for t in thetas:
             loss = loss + self.loss_fn(t, identity)
         return self.eps * loss
 
@@ -222,6 +222,8 @@ class ThetaCropsPenalty(nn.Module):
 
         if self.invert:
             loss = grad_reverse(loss, self.eps)
+        else:
+            loss = grad_scale(loss, self.eps)
 
         return loss
 
@@ -241,4 +243,4 @@ class ThetaCropsPenalty(nn.Module):
         det = torch.det(theta[:, :, :2].float()).abs()
         txy = (1 - (theta[:, :, 2].abs() / 2)).prod(dim=1)
 
-        return self.loss_fn(det, targed) + self.loss_fn(txy, target)
+        return (self.loss_fn(det, targed) + self.loss_fn(txy, target)) / theta.size(0)
