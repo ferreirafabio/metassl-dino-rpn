@@ -503,8 +503,8 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             stn_images, thetas = stn(images)
-            penalty = 0
-            if args.use_stn_penalty:
+            penalty = torch.tensor(0.).cuda()
+            if args.use_stn_penalty and (epoch % 2 != 0):
                 penalty = stn_penalty(images=stn_images, target=images, thetas=thetas)
 
             # Log stuff to tensorboard
