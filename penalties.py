@@ -220,7 +220,7 @@ class ThetaCropsPenalty(nn.Module):
         for x in thetas[2:]:
             loss += self._loss(x, self.local_crops_scale)
 
-        loss /= len(thetas)
+        # loss /= len(thetas)
 
         if self.invert:
             loss = grad_reverse(loss, self.eps)
