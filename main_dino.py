@@ -474,13 +474,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
     if epoch % 2 == 0:
         for p in stn.parameters():
             p.requires_grad = False
-        for p in student.parameters():
-            p.requires_grad = True
     else:
         for p in stn.parameters():
             p.requires_grad = True
-        for p in student.parameters():
-            p.requires_grad = False
 
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
