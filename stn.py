@@ -102,7 +102,7 @@ class LocNet(nn.Module):
     """
 
     def __init__(self, mode: str = 'affine', invert_gradient: bool = False,
-                 num_heads: int = 4, separate_backbones: bool = False,
+                 num_heads: int = 1, separate_backbones: bool = False,
                  conv1_depth: int = 16, conv2_depth: int = 32, avgpool: int = 8):
         super().__init__()
         self.mode = mode

@@ -268,7 +268,7 @@ def train_dino(args):
         conv1_depth=args.stn_conv1_depth,
         conv2_depth=args.stn_conv2_depth,
         theta_norm=args.stn_theta_norm,
-        local_crops_number=args.local_crops_number,
+        local_crops_number=1,
         global_crops_scale=args.global_crops_scale,
         local_crops_scale=args.local_crops_scale,
         resolution=32,
