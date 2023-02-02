@@ -505,7 +505,7 @@ def init_distributed_mode(args):
         sys.exit(1)
 
     dist.init_process_group(
-        backend="nccl",
+        backend="gloo",
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
@@ -1009,20 +1009,9 @@ def build_dataset(is_train, args):
 
 
 def summary_writer_write(summary_writer, stn_images, images, thetas, epoch, it):
-    theta_g1 = thetas[0][0].cpu().detach().numpy()
-    theta_g2 = thetas[1][0].cpu().detach().numpy()
-    theta_l1 = thetas[2][0].cpu().detach().numpy()
-    theta_l2 = thetas[3][0].cpu().detach().numpy()
+    theta = thetas[0].cpu().detach().numpy()
     summary_writer.write_image_grid(tag="images", images=stn_images, original_images=images, epoch=epoch, global_step=it)
-    summary_writer.write_theta_heatmap(tag="theta_g1", theta=theta_g1, epoch=epoch, global_step=it)
-    summary_writer.write_theta_heatmap(tag="theta_g2", theta=theta_g2, epoch=epoch, global_step=it)
-    summary_writer.write_theta_heatmap(tag="theta_l1", theta=theta_l1, epoch=epoch, global_step=it)
-    summary_writer.write_theta_heatmap(tag="theta_l2", theta=theta_l2, epoch=epoch, global_step=it)
-
-    theta_g_euc_norm = np.linalg.norm(np.double(theta_g2 - theta_g1), 2)
-    theta_l_euc_norm = np.linalg.norm(np.double(theta_l2 - theta_l1), 2)
-    summary_writer.write_scalar(tag="theta local eucl. norm.", scalar_value=theta_l_euc_norm, global_step=it)
-    summary_writer.write_scalar(tag="theta global eucl. norm.", scalar_value=theta_g_euc_norm, global_step=it)
+    summary_writer.write_theta_heatmap(tag="theta", theta=theta, epoch=epoch, global_step=it)
 
 
 def print_gradients(stn, args):

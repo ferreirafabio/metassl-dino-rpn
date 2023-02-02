@@ -53,7 +53,7 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
-                        choices=['vit_nano', 'vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny',
+                        choices=['vit_96', 'vit_nano', 'vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny',
                                  'deit_small'] + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
                         help="""Name of architecture to train. For quick experiments with ViTs,
         we recommend using vit_tiny or vit_small.""")
@@ -216,11 +216,11 @@ def train_dino(args):
     # ============ preparing data ... ============
     collate = None if 'CIFAR' in args.dataset or args.resize_all_inputs else custom_collate
 
-    transform = DataAugmentationDINO(
-        args.global_crops_scale,
-        args.local_crops_scale,
-        args.local_crops_number,
-    )
+    # transform = DataAugmentationDINO(args.local_crops_number)
+    transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ])
     dataset = datasets.CIFAR10(args.data_path, train=True, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
@@ -271,21 +271,7 @@ def train_dino(args):
         local_crops_number=args.local_crops_number,
         global_crops_scale=args.global_crops_scale,
         local_crops_scale=args.local_crops_scale,
-        resolution=args.stn_res[0],
-        unbounded_stn=args.use_unbounded_stn,
-    )
-
-    stn_local = STN(
-        mode=args.stn_mode,
-        invert_gradients=args.invert_stn_gradients,
-        separate_localization_net=args.separate_localization_net,
-        conv1_depth=args.stn_conv1_depth,
-        conv2_depth=args.stn_conv2_depth,
-        theta_norm=args.stn_theta_norm,
-        local_crops_number=args.local_crops_number,
-        global_crops_scale=args.global_crops_scale,
-        local_crops_scale=args.local_crops_scale,
-        resolution=args.stn_res[1],
+        resolution=32,
         unbounded_stn=args.use_unbounded_stn,
     )
 
@@ -301,7 +287,7 @@ def train_dino(args):
         DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
     )
     # move networks to gpu
-    student, teacher, stn_global, stn_local = student.cuda(), teacher.cuda(), stn_global.cuda(), stn_local.cuda()
+    student, teacher, stn_global = student.cuda(), teacher.cuda(), stn_global.cuda()
 
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
@@ -318,11 +304,9 @@ def train_dino(args):
 
     if utils.has_batchnorms(stn_global):
         stn_global = nn.SyncBatchNorm.convert_sync_batchnorm(stn_global)
-        stn_local = nn.SyncBatchNorm.convert_sync_batchnorm(stn_local)
 
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
     stn_global = nn.parallel.DistributedDataParallel(stn_global, device_ids=[args.gpu])
-    stn_local = nn.parallel.DistributedDataParallel(stn_local, device_ids=[args.gpu])
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
     # there is no backpropagation through the teacher, so no need for gradients
@@ -349,11 +333,11 @@ def train_dino(args):
     if not args.use_stn_optimizer:
         # do not use wd scheduling of STN params
         student_params = params_groups[1]['params']
-        all_params = student_params + list(stn_global.parameters()) + list(stn_local.parameters())
+        all_params = student_params + list(stn_global.parameters())
         params_groups[1]['params'] = all_params
 
     # ============ ColorAugments after STN ============
-    color_augment = ColorAugmentation(args.local_crops_number) if args.stn_color_augment else None
+    color_augment = ColorAugmentation(args.local_crops_number, args.global_crops_scale, args.local_crops_scale) if args.stn_color_augment else None
 
     # ============ init optimizers ... ============
     if args.optimizer == "adamw":
@@ -397,7 +381,6 @@ def train_dino(args):
         fp16_scaler=fp16_scaler,
         dino_loss=dino_loss,
         stn_global=stn_global,
-        stn_local=stn_local,
         stn_optimizer=stn_optimizer,
     )
 
@@ -417,7 +400,7 @@ def train_dino(args):
         # ============ training one epoch of DINO ... ============
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
                                       data_loader, optimizer, lr_schedule, wd_schedule,
-                                      momentum_schedule, epoch, fp16_scaler, stn_global, stn_local, args,
+                                      momentum_schedule, epoch, fp16_scaler, stn_global, args,
                                       summary_writer, color_augment)
 
         # ============ writing logs ... ============
@@ -429,7 +412,6 @@ def train_dino(args):
             'args': args,
             'dino_loss': dino_loss.state_dict(),
             'stn_global': stn_global.state_dict(),
-            'stn_local': stn_local.state_dict(),
             'stn_optimizer': stn_optimizer.state_dict() if stn_optimizer else None,
         }
         if fp16_scaler is not None:
@@ -449,7 +431,7 @@ def train_dino(args):
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader, optimizer,
                     lr_schedule, wd_schedule, momentum_schedule, epoch,
-                    fp16_scaler, stn_global, stn_local, args, summary_writer, color_augment):
+                    fp16_scaler, stn_global, args, summary_writer, color_augment):
     metric_logger = utils.MetricLogger(delimiter=" ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
@@ -469,17 +451,13 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            stn_images = []
-            thetas = []
-            for img in images[:2]:
-                im, th = stn_global(img)
-                stn_images.append(im)
-                thetas.append(th)
-            for img in images[2:]:
-                im, th = stn_local(img)
-                stn_images.append(im)
-                thetas.append(th)
-
+            # stn_images = []
+            # thetas = []
+            # for img in images:
+            #     im, th = stn_global(img)
+            #     stn_images.append(im)
+            #     thetas.append(th)
+            stn_images, thetas = stn_global(images)
             # Log stuff to tensorboard
             if it % args.summary_writer_freq == 0 and torch.distributed.get_rank() == 0:
                 utils.summary_writer_write(summary_writer, stn_images, images, thetas, epoch, it)
@@ -606,11 +584,12 @@ class DINOLoss(nn.Module):
 
 
 class ColorAugmentation(object):
-    def __init__(self, local_crops_number):
+    def __init__(self, local_crops_number, global_crops_scale, local_crops_scale):
         self.local_crops_number = local_crops_number
         color_jitter = transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
         gaussian_blur = transforms.GaussianBlur(1, (0.1, 2.0))
         self.transform_global1 = transforms.Compose([
+            transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC),
             transforms.RandomApply([color_jitter], p=0.8),
             transforms.RandomGrayscale(p=0.2),
             transforms.RandomApply([gaussian_blur], p=1.0),
@@ -620,6 +599,7 @@ class ColorAugmentation(object):
         ])
 
         self.transform_global2 = transforms.Compose([
+            transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC),
             transforms.RandomApply([color_jitter], p=0.8),
             transforms.RandomGrayscale(p=0.2),
             transforms.RandomApply([gaussian_blur], p=0.1),
@@ -630,6 +610,7 @@ class ColorAugmentation(object):
         ])
 
         self.transform_local = transforms.Compose([
+            transforms.RandomResizedCrop(16, scale=local_crops_scale, interpolation=InterpolationMode.BICUBIC),
             transforms.RandomApply([color_jitter], p=0.8),
             transforms.RandomGrayscale(p=0.2),
             transforms.RandomApply([gaussian_blur], p=0.5),
@@ -637,34 +618,31 @@ class ColorAugmentation(object):
             transforms.ConvertImageDtype(torch.float32),
         ])
 
-    def __call__(self, images):
+    def __call2__(self, images):
         crops = [self.transform_global1(images[0]), self.transform_global2(images[1])]
         for img in images[2:]:
             crops.append(self.transform_local(img))
         return crops
 
+    def __call__(self, img):
+        crops = [self.transform_global1(img), self.transform_global2(img)]
+        for _ in range(self.local_crops_number):
+            crops.append(self.transform_local(img))
+        return crops
+
 
 class DataAugmentationDINO(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
+    def __init__(self, local_crops_number):
         # first global crop
-        self.global_transform = transforms.Compose([
-            transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC),
+        self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
         # transformation for the local small crops
         self.local_crops_number = local_crops_number
-        self.local_transform = transforms.Compose([
-            transforms.RandomResizedCrop(16, scale=local_crops_scale, interpolation=InterpolationMode.BICUBIC),
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        ])
 
     def __call__(self, image):
-        crops = [self.global_transform(image), self.global_transform(image)]
-        for _ in range(self.local_crops_number):
-            crops.append(self.local_transform(image))
-        return crops
+        return [self.transform(image) for _ in range(self.local_crops_number + 2)]
 
 
 if __name__ == '__main__':
