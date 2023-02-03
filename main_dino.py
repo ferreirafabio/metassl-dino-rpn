@@ -196,6 +196,8 @@ def get_args_parser():
     parser.add_argument("--invert_penalty", default=False, type=utils.bool_flag,
                         help="Invert the penalty loss.")
     parser.add_argument("--stn_color_augment", default=False, type=utils.bool_flag, help="todo")
+    parser.add_argument('--freeze_stn_ep', default=0, type=int,
+                        help='number of epochs, where the stn is frozen between training phases')
 
     # tests
     parser.add_argument("--test_mode", default=False, type=utils.bool_flag, help="Set this flag to activate test mode.")
@@ -471,12 +473,14 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
     metric_logger = utils.MetricLogger(delimiter=" ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
 
-    if epoch % 2 == 0:
-        for p in stn.parameters():
-            p.requires_grad = False
-    else:
+    if epoch and epoch % args.freeze_stn_ep == 0:
+        requires_grad = True
         for p in stn.parameters():
             p.requires_grad = True
+    else:
+        requires_grad = False
+        for p in stn.parameters():
+            p.requires_grad = False
 
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
@@ -500,7 +504,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, stn_penalt
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             stn_images, thetas = stn(images)
             penalty = torch.tensor(0.).cuda()
-            if args.use_stn_penalty and (epoch % 2 != 0):
+            if args.use_stn_penalty and requires_grad:
                 penalty = stn_penalty(images=stn_images, target=images, thetas=thetas)
 
             # Log stuff to tensorboard
